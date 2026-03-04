@@ -10,7 +10,6 @@ frontend/out/
 frontend/dist/
 backend/dist/
 backend/build/
-*.spec
 
 # Environment files - Frontend and Backend
 frontend/.env

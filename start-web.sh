@@ -1,30 +1,22 @@
 #!/bin/bash
+# PM2230 Dashboard - Linux/Mac Launcher
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "======================================================"
 echo " PM2230 Dashboard - Web Mode Launcher"
 echo "======================================================"
 
-# Setup .env if not exists
-if [ ! -f "$SCRIPT_DIR/.env" ]; then
-    echo "[*] First-time setup..."
-    echo "DASHSCOPE_API_KEY=" > "$SCRIPT_DIR/.env"
-    echo "DASHSCOPE_MODEL=qwen-plus" >> "$SCRIPT_DIR/.env"
-    echo "PM2230_API_PORT=8003" >> "$SCRIPT_DIR/.env"
-    echo "PM2230_SIMULATE=0" >> "$SCRIPT_DIR/.env"
-    echo ""
-    echo "⚠️  ใส่ DashScope API Key สำหรับ AI (กด Enter เพื่อข้าม)"
-    read -p "API Key: " api_key
-    if [ ! -z "$api_key" ]; then
-        sed -i "s/DASHSCOPE_API_KEY=.*/DASHSCOPE_API_KEY=$api_key/" "$SCRIPT_DIR/.env"
-        echo "[OK] บันทึก API Key แล้ว"
-    fi
-fi
-
 # Clear port 8003 if in use
 fuser -k 8003/tcp 2>/dev/null || true
 
-# Start backend
+# Check backend binary
+if [ ! -f "$SCRIPT_DIR/backend-server" ]; then
+    echo "[!] ไม่พบไฟล์ backend-server"
+    echo "    กรุณา build ก่อนด้วย: ./build.sh"
+    exit 1
+fi
+
+# Start backend (serves API + Frontend)
 echo "[*] Starting server..."
 "$SCRIPT_DIR/backend-server" &
 BACKEND_PID=$!

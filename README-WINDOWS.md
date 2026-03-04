@@ -1,149 +1,70 @@
-# 🪟 PM2230 Dashboard - Windows Guide
+# 🪟 PM2230 Dashboard - คู่มือสำหรับ Windows
 
-## 🚀 วิธีใช้งาน (Windows)
+## 🚀 วิธีใช้งาน (ง่ายที่สุด)
 
-### **วิธีที่ 1: ใช้ Batch File (ง่ายสุด!)**
+### ขั้นที่ 1: แตกไฟล์ ZIP
+แตก ZIP ที่ได้รับออกมา จะได้ไฟล์ดังนี้:
+```
+📁 PM2230-Dashboard/
+  ├── backend-server.exe   ← ตัวโปรแกรมหลัก
+  └── start-web.bat        ← ไฟล์เริ่มต้นโปรแกรม
+```
 
-1. **ดับเบิลคลิก** `start-windows.bat`
-2. **รอ** โปรแกรมติดตั้งและเริ่มอัตโนมัติ
-3. **เปิด Browser:** http://localhost:3002
+### ขั้นที่ 2: รันโปรแกรม
+**ดับเบิ้ลคลิก** ที่ `start-web.bat`
 
-**เสร็จแล้ว!** 🎉
+### ขั้นที่ 3: เปิด Dashboard
+Browser จะเปิดอัตโนมัติไปที่:  
+**http://localhost:8003**
+
+**เสร็จแล้ว!** 🎉 ไม่ต้องติดตั้งอะไรเพิ่มเติมทั้งนั้น
 
 ---
 
-### **วิธีที่ 2: ทำทีละขั้น**
+## 🎯 วิธีใช้ Dashboard
 
-#### **1. ติดตั้ง Backend**
-```cmd
-cd pm2230-nextjs\backend
-
-# สร้าง virtual environment
-python -m venv .venv
-
-# เปิดใช้งาน
-.venv\Scripts\activate
-
-# ติดตั้ง dependencies
-pip install -r requirements.txt
-```
-
-#### **2. เริ่ม Backend**
-```cmd
-python main.py
-```
-
-#### **3. ติดตั้ง Frontend** (เปิด terminal ใหม่)
-```cmd
-cd pm2230-nextjs\frontend
-npm install
-```
-
-#### **4. เริ่ม Frontend**
-```cmd
-npm run dev -- -p 3002
-```
-
-#### **5. เปิด Dashboard**
-```
-http://localhost:3002
-```
+| Tab | เนื้อหา |
+|-----|--------|
+| **📊 ภาพรวม** | Voltage, Current, Frequency |
+| **⚡ กำลังไฟฟ้า** | Active/Reactive/Apparent Power |
+| **📈 คุณภาพไฟฟ้า** | THD, Unbalance, Power Factor |
+| **🔋 พลังงาน** | kWh, kVAh, kvarh |
+| **✨ AI Analysis** | วิเคราะห์แนวโน้มพลังงานด้วย AI |
 
 ---
 
-## 📦 **สิ่งที่ต้องติดตั้งก่อน:**
+## 🔌 การเชื่อมต่อ PM2230
 
-### **1. Python 3.12**
-- ดาวน์โหลด: https://www.python.org/downloads/
-- ✅ **สำคัญ:** ติ๊ก "Add Python to PATH" ตอนติดตั้ง
+1. ต่อสายสัญญาณ RS485 จาก PM2230 เข้า PC
+2. เปิดโปรแกรมแล้วกดปุ่ม **"Auto Connect"** ใน Dashboard
+3. โปรแกรมจะค้นหาพอร์ต COM อัตโนมัติ
 
-### **2. Node.js (LTS)**
-- ดาวน์โหลด: https://nodejs.org/
-- เลือก "LTS Version"
-- ติดตั้งแบบปกติ
+**Setting เริ่มต้น:** Baud Rate 9600, Parity Even, Slave ID 1
 
 ---
 
-## ✅ **เช็คว่าติดตั้งครบ:**
+## 🛑 วิธีปิดโปรแกรม
 
-**เปิด Command Prompt:**
-```cmd
-python --version
-# ต้องเห็น: Python 3.12.x
-
-node --version
-# ต้องเห็น: v20.x.x
-
-npm --version
-# ต้องเห็น: 10.x.x
-```
+กด **Ctrl+C** ในหน้าต่าง Terminal  
+หรือปิดหน้าต่าง Terminal โดยตรงครับ
 
 ---
 
-## 🎯 **วิธีใช้ Dashboard:**
+## ❓ แก้ปัญหาเบื้องต้น
 
-### **Tab 1: 📊 ภาพรวม**
-- Voltage (V_LN1, V_LN2, V_LN3)
-- Current (I_L1, I_L2, I_L3, I_N)
-- Frequency
+### โปรแกรมไม่เปิด / ค้าง
+→ ลองดับเบิ้ลคลิก `start-web.bat` ใหม่อีกครั้ง
 
-### **Tab 2: ⚡ กำลังไฟฟ้า**
-- Active Power (P)
-- Apparent Power (S)
-- Reactive Power (Q)
+### Port 8003 ถูกใช้งานอยู่
+→ `start-web.bat` จะเคลียร์ port ให้อัตโนมัติครับ
 
-### **Tab 3: 📈 คุณภาพไฟฟ้า**
-- THD, Unbalance, Power Factor
+### Browser ไม่เปิดอัตโนมัติ
+→ เปิด Browser แล้วพิมพ์ `http://localhost:8003` ด้วยตัวเองครับ
 
-### **Tab 4: 🔋 พลังงาน**
-- kWh, kVAh, kvarh
-
-### **Tab 5: 🎁 Bonus Functions**
-- Health Score, Alert, Cost, Triangle
-
-### **Tab 6: 📤 Excel Import**
-- Upload Excel → Analyze
+### ไม่เจอ Device PM2230
+→ ตรวจสอบสาย RS485 และ Driver ของ USB-RS485 Adapter
 
 ---
 
-## 🛑 **วิธีหยุด:**
-
-1. **ปิดหน้าต่าง** Command Prompt ทั้ง 2 อัน
-2. หรือ กด **Ctrl+C** ในแต่ละหน้าต่าง
-
----
-
-## ❓ **แก้ปัญหา:**
-
-### **Python ไม่เจอ:**
-```
-ติดตั้งใหม่ → ติ๊ก "Add Python to PATH"
-```
-
-### **npm ไม่เจอ:**
-```
-ติดตั้ง Node.js ใหม่
-```
-
-### **Port 3002 ใช้งานอยู่:**
-```cmd
-npm run dev -- -p 3003
-# แล้วเปิด: http://localhost:3003
-```
-
-### **Permission Error:**
-```
-คลิกขวาที่ start-windows.bat → Run as Administrator
-```
-
----
-
-## 🐚 **ต้องการความช่วยเหลือ?**
-
-ส่งข้อความมาที่: [Telegram]
-หรือถามในแชทได้เลยค่ะ!
-
----
-
-**โดย:** พาย (Pi) 🐚  
-**สำหรับ:** Windows 10/11
+**สำหรับ:** Windows 10 / 11  
+**Last Updated:** 2026-03-04

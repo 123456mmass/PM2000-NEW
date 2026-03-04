@@ -1,53 +1,42 @@
 @echo off
-echo ========================================
-echo  PM2230 Dashboard - Windows Starter
-echo ========================================
+setlocal enabledelayedexpansion
+title PM2230 Dashboard
+echo ======================================================
+echo  PM2230 Dashboard - Windows Launcher
+echo ======================================================
 echo.
 
-:: Check if .venv exists
-if not exist "backend\.venv" (
-    echo [1/4] Creating virtual environment...
-    cd backend
-    python -m venv .venv
-    cd ..
+:: Clear port 8003 if in use
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8003 2^>nul') do taskkill /f /pid %%a >nul 2>&1
+
+:: Check backend exe
+if not exist "%~dp0backend\dist\backend-server.exe" (
+    if not exist "%~dp0backend-server.exe" (
+        echo [!] ไม่พบไฟล์ backend-server.exe
+        echo     กรุณารัน build-windows.bat ก่อน
+        pause
+        exit /b 1
+    )
+    set "EXE=%~dp0backend-server.exe"
+) else (
+    set "EXE=%~dp0backend\dist\backend-server.exe"
 )
 
-:: Activate and install backend
-echo [2/4] Installing backend dependencies...
-cd backend
-call .venv\Scripts\activate
-pip install -r requirements.txt -q
-cd ..
+:: Start backend (serves API + Frontend)
+echo [*] Starting server...
+start "" /B "%EXE%"
 
-:: Start backend
-echo [3/4] Starting backend on port 8002...
-start "PM2230 Backend" cmd /k "cd backend && .venv\Scripts\activate && python main.py"
-
-:: Wait for backend to start
-echo Waiting for backend to start (5 seconds)...
-timeout /t 5 /nobreak >nul
-
-:: Install frontend if needed
-if not exist "frontend\node_modules" (
-    echo [4/4] Installing frontend dependencies...
-    cd frontend
-    call npm install --legacy-peer-deps
-    cd ..
-)
-
-:: Start frontend
-echo Starting frontend on port 3002...
-start "PM2230 Frontend" cmd /k "cd frontend && npm run dev -- -p 3002"
+:: Wait and open browser
+echo [*] กำลังเปิด Dashboard...
+timeout /t 3 /nobreak > nul
+start "" "http://localhost:8003"
 
 echo.
-echo ========================================
-echo  ✅ Dashboard is starting...
-echo ========================================
-echo.
-echo  Backend:  http://localhost:8002
-echo  Dashboard: http://localhost:3002
-echo  API Docs: http://localhost:8002/docs
-echo.
-echo  Press any key to exit this window...
-echo.
-pause >nul
+echo ======================================================
+echo  ✅ Dashboard: http://localhost:8003
+echo  กด Ctrl+C หรือปิดหน้าต่างนี้เพื่อหยุด
+echo ======================================================
+pause > nul
+
+:: Cleanup
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8003 2^>nul') do taskkill /f /pid %%a >nul 2>&1
