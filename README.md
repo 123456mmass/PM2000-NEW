@@ -65,10 +65,11 @@ backend-server.exe (FastAPI + Uvicorn)
 
 ---
 
-## ✨ AI Analysis (Bonus)
+## ✨ สิ่งที่เพิ่มเข้ามา (Human-Focused Update)
 
-ระบบวิเคราะห์ข้อมูลพลังงานด้วย AI (DashScope Qwen)  
-คีย์ AI ถูกฝังอยู่ใน `backend-server.exe` เรียบร้อยแล้ว
+- **Mobile First Optimization**: หน้าจอรองรับการใช้งานบนมือถืออย่างสมบูรณ์ (Single-line Header, Icon-only Tabs)
+- **Natural Scroll Header**: ระบบซ่อนแถบเมนูตามการเลื่อน (Scroll-linked) เพื่อเพิ่มพื้นที่การดูข้อมูล AI และกราฟ
+- **AI Analysis Polish**: ปรับปรุงการจัดวางคำแนะนำจาก AI ให้สวยงามและอ่านง่ายทั้งใน Desktop และ Mobile
 
 ---
 
@@ -85,5 +86,5 @@ backend-server.exe (FastAPI + Uvicorn)
 
 ---
 
-**Last Updated:** 2026-03-04  
-**Status:** Ready for Presentation 🎓
+**Last Updated:** 2026-03-04 (19:18)
+**Status:** Ready & Polished 💎🎓
