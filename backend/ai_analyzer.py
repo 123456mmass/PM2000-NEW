@@ -840,8 +840,11 @@ def _get_or_init_parallel_router() -> Optional[ParallelLLMRouter]:
             payload = {
                 "messages": messages,
                 "model": DEFAULT_MODEL,
-                "max_tokens": 1500,
-                "temperature": 0.5
+                "max_tokens": 800,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "presence_penalty": 0.0,
+                "frequency_penalty": 0.0
             }
             return await _call_dashscope_api(payload, use_fallback=False)
         router.register_provider("dashscope_primary", dashscope_primary_call)
@@ -851,8 +854,11 @@ def _get_or_init_parallel_router() -> Optional[ParallelLLMRouter]:
             payload = {
                 "messages": messages,
                 "model": FALLBACK_MODEL,
-                "max_tokens": 1500,
-                "temperature": 0.5
+                "max_tokens": 800,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "presence_penalty": 0.0,
+                "frequency_penalty": 0.0
             }
             return await _call_dashscope_api(payload, use_fallback=True)
         router.register_provider("dashscope_fallback", dashscope_fallback_call)

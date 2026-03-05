@@ -116,7 +116,7 @@ class ParallelLLMRouter:
     
     def __init__(self):
         self.providers: Dict[str, Callable] = {}
-        self.timeout = 60.0  # วินาที
+        self.timeout = 120.0  # วินาที (เพิ่มจาก 60 เนื่องจากโมเดลคิดนาน)
         
     def register_provider(self, name: str, call_func: Callable):
         """ลงทะเบียน provider"""
