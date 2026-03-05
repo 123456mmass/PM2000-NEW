@@ -55,6 +55,31 @@ export const ChatPanel = () => {
         }
     }, [messages]);
 
+    // Listen for external events to open chat with context
+    useEffect(() => {
+        const handleOpenChat = (event: CustomEvent) => {
+            const { context, source } = event.detail || {};
+            
+            // Open chat
+            setIsOpen(true);
+            
+            // Add context message from user
+            if (context) {
+                const contextMsg: Message = { 
+                    role: 'user', 
+                    content: `[จากผลวิเคราะห์${source || 'AI'}]\n${context}\n\nขอสอบถามเพิ่มเติมเกี่ยวกับผลวิเคราะห์นี้ครับ`
+                };
+                setMessages(prev => [...prev, contextMsg]);
+            }
+        };
+
+        // @ts-ignore - CustomEvent listener
+        window.addEventListener('open-chat-with-context', handleOpenChat);
+        
+        // @ts-ignore
+        return () => window.removeEventListener('open-chat-with-context', handleOpenChat);
+    }, []);
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 

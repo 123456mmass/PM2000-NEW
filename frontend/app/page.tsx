@@ -534,6 +534,30 @@ export default function Home() {
     setIsEnergyExpanded(false);
   }, []);
 
+  // Ask AI Advisor handlers
+  const askAiAdvisor = useCallback((context: string, source: string) => {
+    // Dispatch custom event to open chat with context
+    const event = new CustomEvent('open-chat-with-context', {
+      detail: { context, source }
+    });
+    window.dispatchEvent(event);
+  }, []);
+
+  const handleAskAiAboutSummary = useCallback(() => {
+    if (!aiSummary) return;
+    askAiAdvisor(aiSummary, 'AI Power Analysis');
+  }, [aiSummary, askAiAdvisor]);
+
+  const handleAskAiAboutPredictive = useCallback(() => {
+    if (!predictiveResult?.message) return;
+    askAiAdvisor(predictiveResult.message, 'Predictive Maintenance');
+  }, [predictiveResult, askAiAdvisor]);
+
+  const handleAskAiAboutEnergy = useCallback(() => {
+    if (!energyResult?.analysis) return;
+    askAiAdvisor(energyResult.analysis, 'Energy Management');
+  }, [energyResult, askAiAdvisor]);
+
   const handleStartLogging = useCallback(async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     try {
@@ -1005,6 +1029,14 @@ export default function Home() {
                       </button>
                       <button
                         type="button"
+                        onClick={handleAskAiAboutSummary}
+                        title="ถามต่อ AI Advisor"
+                        className="px-3 py-2 bg-purple-900/40 hover:bg-purple-900/60 text-purple-400 border border-purple-500/30 rounded-lg text-sm transition flex items-center gap-2"
+                      >
+                        💬 ถามต่อ
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setIsAiExpanded(!isAiExpanded)}
                         className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600 rounded-lg text-sm transition font-medium"
                       >
@@ -1102,6 +1134,14 @@ export default function Home() {
                         className="px-3 py-2 bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm transition flex items-center gap-2"
                       >
                         📄 TXT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAskAiAboutPredictive}
+                        title="ถามต่อ AI Advisor"
+                        className="px-3 py-2 bg-purple-900/40 hover:bg-purple-900/60 text-purple-400 border border-purple-500/30 rounded-lg text-sm transition flex items-center gap-2"
+                      >
+                        💬 ถามต่อ
                       </button>
                       <button
                         type="button"
@@ -1220,6 +1260,14 @@ export default function Home() {
                             className="px-3 py-2 bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm transition flex items-center gap-2"
                           >
                             📄 TXT
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAskAiAboutEnergy}
+                            title="ถามต่อ AI Advisor"
+                            className="px-3 py-2 bg-purple-900/40 hover:bg-purple-900/60 text-purple-400 border border-purple-500/30 rounded-lg text-sm transition flex items-center gap-2"
+                          >
+                            💬 ถามต่อ
                           </button>
                           <button
                             type="button"
