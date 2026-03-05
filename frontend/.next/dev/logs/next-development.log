@@ -927,3 +927,44 @@ Import traces:
 
 Previous: %s
 Incoming: %s useEffect [] [[object Object],[object Object],[object Object],[object Object]]
+[00:49:23.634] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:23.634] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:23.634] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:23.634] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:23.634] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:23.634] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:25.640] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:25.640] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:25.640] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:25.640] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:25.640] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:27.839] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:30.634] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:30.635] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:30.635] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:30.635] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:30.635] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:30.635] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:32.638] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:35.635] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:35.635] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:35.635] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:35.635] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:35.635] Browser WARN    Warning fetching page4: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching page1: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching page2: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching page3: Failed to fetch
+[00:49:37.457] Browser WARN    Warning fetching page4: Failed to fetch
+[00:54:18.042] Server  LOG     ✓ Compiled in 51ms

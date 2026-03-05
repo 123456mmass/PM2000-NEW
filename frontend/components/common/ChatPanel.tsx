@@ -55,6 +55,10 @@ export const ChatPanel = () => {
         }
     }, [messages]);
 
+    // Use ref to access current messages without triggering re-renders
+    const messagesRef = useRef(messages);
+    messagesRef.current = messages;
+
     // Listen for external events to open chat with context
     useEffect(() => {
         const handleOpenChat = async (event: CustomEvent) => {
@@ -69,7 +73,8 @@ export const ChatPanel = () => {
                     role: 'user', 
                     content: `[จากผลวิเคราะห์${source || 'AI'}]\n${context}\n\nขอสอบถามเพิ่มเติมเกี่ยวกับผลวิเคราะห์นี้ครับ`
                 };
-                const newMessages = [...messages, contextMsg];
+                const currentMessages = messagesRef.current;
+                const newMessages = [...currentMessages, contextMsg];
                 setMessages(newMessages);
                 
                 // Auto send to AI
@@ -91,7 +96,7 @@ export const ChatPanel = () => {
         
         // @ts-ignore
         return () => window.removeEventListener('open-chat-with-context', handleOpenChat);
-    }, [messages]);
+    }, []);  // Empty dependency array - use ref instead
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
