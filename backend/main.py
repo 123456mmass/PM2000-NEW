@@ -47,6 +47,7 @@ load_dotenv(_env_path, override=True)
 # Import PM2230 Client
 from pm2230_client import PM2230Client
 from ai_analyzer import generate_power_summary, generate_english_report
+from ai_analyzer import _get_or_init_parallel_router
 from llm_parallel import get_parallel_router
 
 from contextlib import asynccontextmanager
@@ -1270,7 +1271,7 @@ async def get_external_predictive_maintenance(request: Request):
         ]
         
         # Call Parallel LLM Router
-        router = get_parallel_router()
+        router = _get_or_init_parallel_router()
         parallel_result = await router.generate_parallel(
             messages=messages,
             task_type="predictive_analysis",
@@ -1462,7 +1463,7 @@ async def get_energy_efficiency_ai(request: Request):
         ]
         
         # Call Parallel LLM Router
-        router = get_parallel_router()
+        router = _get_or_init_parallel_router()
         parallel_result = await router.generate_parallel(
             messages=messages,
             task_type="energy_analysis",
@@ -1999,7 +2000,7 @@ async def get_ai_fault_summary(request: Request):
         ]
         
         # Call Parallel LLM Router
-        router = get_parallel_router()
+        router = _get_or_init_parallel_router()
         parallel_result = await router.generate_parallel(
             messages=messages,
             task_type="fault_analysis",
