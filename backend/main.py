@@ -33,6 +33,9 @@ from functools import wraps
 from collections import defaultdict
 import re
 import httpx
+import json
+import hashlib
+import numpy as np
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -1187,7 +1190,6 @@ async def get_predictive_maintenance(request: Request):
 async def get_external_predictive_maintenance(request: Request):
     """ทำนายการบำรุงรักษาด้วยโมเดลภายนอก (Parallel Mode)"""
     try:
-        import numpy as np
         from predictive_maintenance_external import create_data_hash, get_from_cache, save_to_cache
         
         data = get_latest_data()
@@ -1384,11 +1386,6 @@ async def get_energy_efficiency(request: Request):
 async def get_energy_efficiency_ai(request: Request):
     """วิเคราะห์ประสิทธิภาพพลังงานด้วย AI (Parallel Mode)"""
     try:
-        import hashlib
-        import time
-        import json
-        import numpy as np
-        
         data = get_latest_data()
         
         # Create cache key
@@ -1946,7 +1943,6 @@ async def get_ai_fault_summary(request: Request):
                 fault_records.append(record)
         
         # Create cache key
-        import hashlib
         data_str = json.dumps(fault_records, sort_keys=True)
         cache_key = f"ai_flt_{hashlib.md5(data_str.encode()).hexdigest()[:8]}"
         
