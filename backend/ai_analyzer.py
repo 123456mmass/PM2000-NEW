@@ -122,7 +122,7 @@ def clear_all_cache() -> int:
 DASHSCOPE_API_BASE = os.getenv("DASHSCOPE_API_BASE", "https://coding-intl.dashscope.aliyuncs.com/v1")
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 DEFAULT_MODEL = os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus")
-FALLBACK_MODEL = os.getenv("DASHSCOPE_FALLBACK_MODEL", "qwen-turbo")
+FALLBACK_MODEL = os.getenv("DASHSCOPE_FALLBACK_MODEL", "qwen3-max-2026-01-23")
 
 # Mistral AI Agents Endpoint
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
