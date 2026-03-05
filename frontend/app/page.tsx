@@ -499,6 +499,21 @@ export default function Home() {
     }
   }, [refresh, API_BASE_URL]);
 
+  const handleTestLineNotify = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/test-line-notify`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert('✅ ส่งข้อความทดสอบเข้า LINE เรียบร้อยแล้ว!');
+      } else {
+        alert('❌ ส่งไม่สำเร็จ: ' + (data.message || 'Unknown error'));
+      }
+      setIsClearMenuOpen(false);
+    } catch (err) {
+      alert('⚠️ เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + err);
+    }
+  }, [API_BASE_URL]);
+
   const handleToggleSimulateMode = async () => {
     try {
       setToggleLoading(true);
@@ -679,6 +694,14 @@ export default function Home() {
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                           Clear Fault Log
+                        </button>
+                        <div className="border-t border-gray-800 my-1"></div>
+                        <button
+                          onClick={handleTestLineNotify}
+                          className="w-full text-left px-4 py-2 text-xs text-gray-400 hover:bg-green-600/10 hover:text-green-400 transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                          Test LINE Notify
                         </button>
                         <div className="border-t border-gray-800 my-1"></div>
                         <button

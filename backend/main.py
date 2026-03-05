@@ -25,6 +25,7 @@ import logging
 from functools import wraps
 from collections import defaultdict
 import re
+import httpx
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -99,6 +100,47 @@ rate_limiter = RateLimiter(max_requests=10, window_seconds=1.0)
 
 # AI-specific rate limiter (stricter - 2 requests per second)
 ai_rate_limiter = RateLimiter(max_requests=2, window_seconds=1.0)
+
+# LINE Messaging API Configuration
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+LINE_USER_ID = os.getenv("LINE_USER_ID", "")
+LINE_MESSAGING_URL = "https://api.line.me/v2/bot/message/push"
+last_line_notify_time = 0
+last_sent_fault_categories = set()
+LINE_NOTIFY_COOLDOWN = 60  # seconds
+
+async def send_line_message(message: str):
+    """Send a push message via LINE Messaging API."""
+    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
+        logger.warning("LINE Messaging API credentials not fully configured. Skipping.")
+        return False
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
+    }
+    payload = {
+        "to": LINE_USER_ID,
+        "messages": [
+            {
+                "type": "text",
+                "text": message
+            }
+        ]
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(LINE_MESSAGING_URL, headers=headers, json=payload)
+            if response.status_code == 200:
+                logger.info("LINE push message sent successfully")
+                return True
+            else:
+                logger.error(f"Failed to send LINE message: {response.status_code} {response.text}")
+                return False
+    except Exception as e:
+        logger.error(f"Error sending LINE message: {e}")
+        return False
 
 def rate_limit(func):
     """Decorator for rate limiting endpoints (DISABLED)."""
@@ -501,6 +543,25 @@ async def poll_modbus_data():
                         row.append(fault_details)
                         
                         writer.writerow(row)
+                        
+                        # Send LINE Notification (Smart Logic: Immediate if new fault types, else use cooldown)
+                        global last_line_notify_time, last_sent_fault_categories
+                        now = time.time()
+                        current_fault_categories = set(a['category'] for a in current_alerts.get("alerts", []))
+                        
+                        is_new_fault_pattern = current_fault_categories != last_sent_fault_categories
+                        is_cooldown_expired = now - last_line_notify_time > LINE_NOTIFY_COOLDOWN
+                        
+                        if is_new_fault_pattern or is_cooldown_expired:
+                            alert_msgs = [f"⚠️ {a['category'].upper()}: {a['message']}" for a in current_alerts.get("alerts", [])]
+                            full_msg = "\n🚨 [FAULT DETECTED] PM2000\n" + "\n".join(alert_msgs)
+                            full_msg += f"\n⏰ เวลา: {datetime.now().strftime('%H:%M:%S')}"
+                            
+                            # Use create_task to avoid blocking the polling loop
+                            asyncio.create_task(send_line_message(full_msg))
+                            last_line_notify_time = now
+                            last_sent_fault_categories = current_fault_categories
+                            
                 except Exception as log_err:
                     logger.error(f"Error writing to Fault log file: {log_err}")
 
@@ -1337,6 +1398,19 @@ async def get_ai_english_report(request: Request):
         "is_cached": result.get("is_cached", False),
         "cache_key": result.get("cache_key", "")
     }
+
+@app.post("/api/v1/test-line-notify")
+@rate_limit
+async def test_line_notify(request: Request):
+    """Test LINE Messaging API configuration."""
+    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
+        return {"status": "error", "message": "LINE credentials (TOKEN or USER_ID) are not configured in .env file"}
+    
+    success = await send_line_message("\n🔔 [TEST] PM2000 System\nทดสอบการเชื่อมต่อระบบ LINE Messaging API สำเร็จ!")
+    if success:
+        return {"status": "success", "message": "Test message sent"}
+    else:
+        return {"status": "error", "message": "Failed to send test message. Check your credentials or connection."}
 
 @app.post("/api/v1/ai-fault-summary")
 @ai_rate_limit
