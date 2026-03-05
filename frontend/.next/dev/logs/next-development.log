@@ -968,3 +968,36 @@ Incoming: %s useEffect [] [[object Object],[object Object],[object Object],[obje
 [00:49:37.457] Browser WARN    Warning fetching page3: Failed to fetch
 [00:49:37.457] Browser WARN    Warning fetching page4: Failed to fetch
 [00:54:18.042] Server  LOG     ✓ Compiled in 51ms
+[00:55:35.496] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:59:20.591] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:20.591] Browser WARN    Warning fetching page2: Failed to fetch
+[00:59:20.591] Browser WARN    Warning fetching page3: Failed to fetch
+[00:59:20.591] Browser WARN    Warning fetching page4: Failed to fetch
+[00:59:20.591] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:59:20.591] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:59:22.952] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:22.952] Browser WARN    Warning fetching page2: Failed to fetch
+[00:59:22.952] Browser WARN    Warning fetching page3: Failed to fetch
+[00:59:22.952] Browser WARN    Warning fetching page4: Failed to fetch
+[00:59:22.952] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching page2: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching page3: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching page4: Failed to fetch
+[00:59:25.347] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching page2: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching page3: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching page4: Failed to fetch
+[00:59:27.685] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching page2: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching page3: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching page4: Failed to fetch
+[00:59:30.630] Browser WARN    Warning fetching logStatus: Failed to fetch
+[00:59:32.750] Browser WARN    Warning fetching systemStatus: Failed to fetch
+[00:59:32.750] Browser WARN    Warning fetching page1: Failed to fetch
+[00:59:32.750] Browser WARN    Warning fetching page2: Failed to fetch
