@@ -41,16 +41,22 @@ echo [1/4] Setting up Python Backend...
 cd backend
 if not exist .venv (
     echo Creating virtual environment...
-    python -m venv .venv
+    py -3.12 -m venv .venv
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment. Is Python 3.12 installed?
+        echo Download from: https://www.python.org/downloads/release/python-3121/
+        pause
+        exit /b 1
+    )
 )
-call .venv\Scripts\activate
+call .venv\Scripts\activate.bat
 echo Installing Python dependencies...
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install pyinstaller
+python -m pip install -r requirements.txt
+python -m pip install pyinstaller
 
 echo Bundling Python backend into executable (Sidecar)...
-pyinstaller --noconfirm backend-server.spec
+python -m PyInstaller --noconfirm backend-server.spec
 cd ..
 
 :: 2. Setup Frontend
@@ -68,6 +74,10 @@ call npm run build
 :: 4. Package Electron
 echo.
 echo [4/4] Packaging Desktop Application (EXE)...
+echo Clearing electron-builder cache to avoid symlink errors...
+if exist "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign" (
+    rmdir /s /q "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign" >nul 2>&1
+)
 call npm run electron-dist
 cd ..
 

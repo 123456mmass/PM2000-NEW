@@ -1,5 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+import site
+import os
 
+# Find pycloudflared in any site-packages (venv or system)
+pycloudflared_path = None
+for sp in site.getsitepackages():
+    candidate = os.path.join(sp, 'pycloudflared')
+    if os.path.isdir(candidate):
+        pycloudflared_path = candidate
+        break
+
+if pycloudflared_path is None:
+    raise SystemExit("ERROR: pycloudflared not found in any site-packages. Run: python -m pip install pycloudflared")
 
 a = Analysis(
     ['main.py'],
@@ -7,7 +19,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('.env', '.'),
-        ('.venv/Lib/site-packages/pycloudflared', 'pycloudflared'),
+        (pycloudflared_path, 'pycloudflared'),
     ],
     hiddenimports=['pycloudflared'],
     hookspath=[],
