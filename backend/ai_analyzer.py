@@ -840,8 +840,8 @@ def _get_or_init_parallel_router() -> Optional[ParallelLLMRouter]:
             payload = {
                 "messages": messages,
                 "model": DEFAULT_MODEL,
-                "max_tokens": 800,
-                "temperature": 0.7,
+                "max_tokens": 1500,
+                "temperature": 1.0,
                 "top_p": 0.9,
                 "presence_penalty": 0.0,
                 "frequency_penalty": 0.0
@@ -854,8 +854,8 @@ def _get_or_init_parallel_router() -> Optional[ParallelLLMRouter]:
             payload = {
                 "messages": messages,
                 "model": FALLBACK_MODEL,
-                "max_tokens": 800,
-                "temperature": 0.7,
+                "max_tokens": 1500,
+                "temperature": 1.0,
                 "top_p": 0.9,
                 "presence_penalty": 0.0,
                 "frequency_penalty": 0.0
