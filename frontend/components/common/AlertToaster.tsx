@@ -11,6 +11,9 @@ interface AlertItem {
     timestamp: string;
 }
 
+const ALERT_POLL_INTERVAL_MS = 1000;
+const ALERT_REPEAT_INTERVAL_MS = 2000;
+
 // Helper to play a short beep sound
 const playBeep = () => {
     try {
@@ -35,7 +38,7 @@ const playBeep = () => {
 
 export function AlertToaster() {
     const [alerts, setAlerts] = useState<AlertItem[]>([]);
-    const knownAlertsRef = useRef<Set<string>>(new Set());
+    const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
 
     const dismissAlert = useCallback((idToRemove: string) => {
         setAlerts(prev => prev.filter(a => a.id !== idToRemove));
@@ -52,26 +55,28 @@ export function AlertToaster() {
                 if (response?.status === 'ALERT' && Array.isArray(response?.alerts)) {
                     let hasNewAlert = false;
                     const newAlerts: AlertItem[] = [];
-                    const now = new Date().toLocaleTimeString('th-TH', { hour12: false });
+                    const nowMs = Date.now();
+                    const now = new Date(nowMs).toLocaleTimeString('th-TH', { hour12: false });
+                    const isRetainedAlert = response?.retained === true;
 
                     response.alerts.forEach((incoming: any) => {
-                        // Create a signature to roughly identify if we already have this exact alert active
-                        // We check category, severity, and message.
-                        const signature = `${incoming.category}-${incoming.severity}-${incoming.message}`;
+                        const categoryKey = String(incoming.category || 'unknown');
+                        const lastNotifiedAt = lastNotifiedAtRef.current.get(categoryKey) ?? 0;
+                        const shouldNotify = isRetainedAlert
+                            ? lastNotifiedAt === 0
+                            : (nowMs - lastNotifiedAt) >= ALERT_REPEAT_INTERVAL_MS;
 
-                        // If it's not currently tracked as a spawned alert
-                        if (!knownAlertsRef.current.has(signature)) {
-                            hasNewAlert = true;
-                            knownAlertsRef.current.add(signature);
+                        if (!shouldNotify) return;
 
-                            newAlerts.push({
-                                id: signature + '-' + Date.now(),
-                                category: incoming.category,
-                                severity: incoming.severity,
-                                message: incoming.message,
-                                timestamp: now
-                            });
-                        }
+                        hasNewAlert = true;
+                        lastNotifiedAtRef.current.set(categoryKey, nowMs);
+                        newAlerts.push({
+                            id: `${categoryKey}-${nowMs}`,
+                            category: incoming.category,
+                            severity: incoming.severity,
+                            message: incoming.message,
+                            timestamp: now
+                        });
                     });
 
                     if (hasNewAlert) {
@@ -84,16 +89,16 @@ export function AlertToaster() {
                     // The user requested that alerts do not disappear until they click close.
                     // So we do not clear the `alerts` array. 
 
-                    // We DO clear the known signature set so if the same fault happens AGAIN, it will beep and show again.
-                    knownAlertsRef.current.clear();
+                    // Clear the cooldown map so a new fault burst notifies immediately.
+                    lastNotifiedAtRef.current.clear();
                 }
 
             } catch (error) {
-                // Ignore network errors
+                console.warn('Alert polling failed:', error);
             }
         };
 
-        const interval = setInterval(checkAlerts, 3000);
+        const interval = setInterval(checkAlerts, ALERT_POLL_INTERVAL_MS);
         checkAlerts();
 
         return () => {
@@ -111,7 +116,7 @@ export function AlertToaster() {
                     key={alert.id}
                     className={`
             relative p-4 rounded-lg shadow-xl border-l-4 pointer-events-auto transform transition-all duration-300 animate-slide-in-right
-            ${alert.severity === 'high'
+            ${alert.severity === 'critical' || alert.severity === 'high'
                             ? 'bg-red-50/95 dark:bg-red-900/90 border-red-500 text-red-900 dark:text-red-100 backdrop-blur-sm'
                             : alert.severity === 'medium'
                                 ? 'bg-yellow-50/95 dark:bg-yellow-900/90 border-yellow-500 text-yellow-900 dark:text-yellow-100 backdrop-blur-sm'

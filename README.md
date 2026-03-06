@@ -167,3 +167,16 @@ python build.py
 
 **Last Updated:** 2026-03-06 (05:45)  
 **Status:** Presentation Ready 🎓🚀
+
+
+---
+
+## Web Alerts
+
+- The dashboard shows fault toasts at the bottom-right corner of the page.
+- The web alert polling interval is 1 second.
+- Active faults repeat by category every approximately 2 seconds while the same fault remains active.
+- LINE notifications are independent from the web toast flow.
+- Simulator faults and real PM2230 faults use the same /api/v1/alerts category-based web alert logic.
+
+**Last Updated Note:** Web alert timing adjusted on 2026-03-06.

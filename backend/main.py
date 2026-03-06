@@ -288,6 +288,9 @@ external_pm_model: Optional[ExternalPredictiveMaintenance] = None
 em_model: Optional[EnergyManagement] = None
 current_alerts: Dict = {"status": "OK", "alerts": []}
 alerts_lock = asyncio.Lock()
+last_active_alerts: Optional[Dict] = None
+last_alert_seen_at: float = 0.0
+ALERT_RETENTION_SECONDS: float = float(os.getenv("ALERT_RETENTION_SECONDS", "10"))
 
 # Logging attributes
 is_logging: bool = False
@@ -303,6 +306,29 @@ log_headers = [
     "PF_L1", "PF_L2", "PF_L3", "PF_Total",
     "kWh_Total", "kVAh_Total", "kvarh_Total"
 ]
+
+
+def update_current_alerts(alerts: Optional[Dict], now_ts: Optional[float] = None) -> Dict:
+    """Keep the last active alert visible long enough for the web UI to poll it."""
+    global current_alerts, last_active_alerts, last_alert_seen_at
+
+    now_ts = time.time() if now_ts is None else now_ts
+
+    if alerts and alerts.get("status") == "ALERT" and alerts.get("alerts"):
+        current_alerts = copy.deepcopy(alerts)
+        current_alerts["active"] = True
+        current_alerts["retained"] = False
+        last_active_alerts = copy.deepcopy(current_alerts)
+        last_alert_seen_at = now_ts
+    elif last_active_alerts and now_ts - last_alert_seen_at < ALERT_RETENTION_SECONDS:
+        current_alerts = copy.deepcopy(last_active_alerts)
+        current_alerts["active"] = False
+        current_alerts["retained"] = True
+    else:
+        current_alerts = {"status": "OK", "alerts": [], "active": False, "retained": False}
+        last_active_alerts = None
+
+    return copy.deepcopy(current_alerts)
 
 DEFAULT_BAUDRATE: int = int(os.getenv("PM2230_BAUDRATE", "9600"))
 DEFAULT_SLAVE_ID: int = int(os.getenv("PM2230_SLAVE_ID", "1"))
@@ -597,7 +623,7 @@ async def poll_modbus_data():
                 has_alert = _alerts.get("status") == "ALERT"
             
             async with alerts_lock:
-                current_alerts = copy.deepcopy(_alerts) if _alerts else {"status": "OK", "alerts": []}
+                update_current_alerts(_alerts if has_alert else None)
 
             # 1. Normal Data Logging (Only when user starts it)
             if is_logging:

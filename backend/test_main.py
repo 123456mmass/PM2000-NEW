@@ -8,6 +8,7 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
+import main as main_module
 
 # Import test client and app
 from fastapi.testclient import TestClient
@@ -24,6 +25,7 @@ from main import (
     init_csv_file,
     parse_allowed_origins,
     _unique_order,
+    update_current_alerts,
     cached_data,
     real_client,
 )
@@ -593,6 +595,41 @@ class TestAPIEndpoints:
         # Should get at least one 429 (Too Many Requests)
         # or all succeed if rate limiter window passed
         assert all(code in [200, 429] for code in responses)
+
+
+class TestAlertRetention:
+    """Tests for retained alert state used by the web toaster."""
+
+    def test_update_current_alerts_retains_recent_fault(self):
+        recent_alert = {
+            "status": "ALERT",
+            "count": 1,
+            "alerts": [
+                {
+                    "category": "phase_loss",
+                    "severity": "critical",
+                    "message": "Phase Loss Detected: L1 disconnected",
+                }
+            ],
+        }
+
+        with patch.object(main_module, "current_alerts", {"status": "OK", "alerts": []}), \
+             patch.object(main_module, "last_active_alerts", None), \
+             patch.object(main_module, "last_alert_seen_at", 0.0), \
+             patch.object(main_module, "ALERT_RETENTION_SECONDS", 10.0):
+            active = update_current_alerts(recent_alert, now_ts=100.0)
+            assert active["status"] == "ALERT"
+            assert active["active"] is True
+            assert active["retained"] is False
+
+            retained = update_current_alerts(None, now_ts=105.0)
+            assert retained["status"] == "ALERT"
+            assert retained["active"] is False
+            assert retained["retained"] is True
+
+            cleared = update_current_alerts(None, now_ts=111.0)
+            assert cleared["status"] == "OK"
+            assert cleared["alerts"] == []
 
 
 class TestConnectEndpoints:

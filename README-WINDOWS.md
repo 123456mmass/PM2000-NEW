@@ -69,3 +69,16 @@ Browser จะเปิดอัตโนมัติไปที่:
 
 **สำหรับ:** Windows 10 / 11  
 **Last Updated:** 2026-03-04
+
+
+---
+
+## Web Alerts
+
+- Fault notifications appear as toast messages in the bottom-right corner of the dashboard.
+- The dashboard checks for alert updates every 1 second.
+- If the same fault category is still active, the toast repeats every approximately 2 seconds.
+- LINE alerts are separate from the web toast system.
+- Keep the browser open on http://localhost:8003 to receive simulator and real-device web alerts.
+
+**Last Updated Note:** Web alert timing adjusted on 2026-03-06.
