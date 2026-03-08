@@ -178,11 +178,17 @@ SUMMARY_CONTEXT_FIELDS = [
     "V_unb", "I_unb", "kWh_Total"
 ]
 CHAT_CONTEXT_FIELDS = [
-    "status", "timestamp", "V_LN1", "V_LN2", "V_LN3", "V_LN_avg",
+    "status", "timestamp",
+    "V_LN1", "V_LN2", "V_LN3", "V_LN_avg",
+    "V_LL12", "V_LL23", "V_LL31",
     "I_L1", "I_L2", "I_L3", "I_N", "I_avg",
-    "Freq", "P_Total", "PF_Total",
+    "Freq",
+    "P_L1", "P_L2", "P_L3", "P_Total",
+    "S_Total", "Q_Total",
+    "PF_L1", "PF_L2", "PF_L3", "PF_Total",
     "THDv_L1", "THDv_L2", "THDv_L3", "THDi_L1", "THDi_L2", "THDi_L3",
-    "V_unb", "I_unb"
+    "V_unb", "U_unb", "I_unb",
+    "kWh_Total"
 ]
 
 
@@ -711,6 +717,58 @@ async def generate_fault_summary(fault_records: List[Dict[str, str]]) -> Dict[st
             "cache_key": cache_key
         }
 
+async def generate_line_fault_analysis(alerts: List[Dict], meter_data: Dict) -> str:
+    """
+    สร้างข้อความ AI วิเคราะห์ Fault สั้นๆ สำหรับส่งผ่าน LINE (จำกัด ~200 ตัวอักษร)
+    """
+    if not alerts:
+        return ""
+
+    # Create cache key from alerts and a snapshot of critical meter data
+    critical_fields = ["V_LN1", "V_LN2", "V_LN3", "I_L1", "I_L2", "I_L3", "P_Total", "V_unb", "I_unb"]
+    snapshot = build_context_snapshot(meter_data, critical_fields)
+    data_str = json.dumps({"alerts": alerts, "data": snapshot}, sort_keys=True)
+    cache_key = f"line_ai_{hashlib.md5(data_str.encode()).hexdigest()[:8]}"
+
+    cached_result = get_from_cache(cache_key)
+    if cached_result is not None:
+        return cached_result
+
+    prompt = f"""
+วิเคราะห์ Fault ต่อไปนี้จาก Power Meter PM2230 อย่างรวดเร็วและกระชับ (ภาษาไทย, ไม่เกิน 200 ตัวอักษร):
+
+🚨 Faults: {json.dumps(alerts, ensure_ascii=False)}
+📊 ข้อมูลมิเตอร์ขณะเกิด: {json.dumps(snapshot)}
+
+ระบุ:
+1. สาเหตุที่เป็นไปได้ (เช่น มอเตอร์สตาร์ท, โหลดเกิน)
+2. คำแนะนำสั้นๆ (เช่น เช็ค Breaker, ตรวจสอบโหลดเฟส L1)
+"""
+
+    full_messages = [
+        {"role": "system", "content": "You are a professional electrical engineer. Provide a very short, concierge-style root cause analysis for LINE notifications. Max 200 characters. Always Thai."},
+        {"role": "user", "content": prompt}
+    ]
+
+    payload = {
+        "messages": full_messages,
+        "temperature": 0.1,
+        "max_tokens": 150
+    }
+
+    try:
+        # We don't use robust_ai_call here because we want it to be FAST or fail fast
+        # But for consistency, we'll use it since it handles fallbacks.
+        # We'll rely on the caller's timeout.
+        ai_response = await robust_ai_call(full_messages, payload)
+        ai_response = ai_response.strip()
+        save_to_cache(cache_key, ai_response)
+        return ai_response
+    except Exception as e:
+        logger.error(f"LINE AI analysis failed: {e}")
+        return ""
+
+
 async def generate_english_report(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Takes the latest PM2230 power data and generates a formal English A4 report.
@@ -837,6 +895,57 @@ async def generate_chat_response(messages: List[Dict[str, str]], current_data: D
     except Exception as e:
         logger.error(f"Chat AI failed: {e}")
         return f"❌ ขออภัยครับ ระบบแชท AI มีปัญหาในการประมวลผล: {str(e)}"
+
+
+# ── LINE-specific: use ALL fields for comprehensive answers ──
+LINE_CONTEXT_FIELDS = list(VALID_DATA_FIELDS)  # All 42 parameters
+
+async def generate_line_chat_response(
+    user_message: str,
+    current_data: Dict[str, Any],
+    recent_faults: List[Dict[str, Any]]
+) -> str:
+    """
+    AI call optimized for LINE Chat.
+    - Full 42 parameter context (comprehensive answers)
+    - Skips race/parallel router (direct robust_ai_call = faster)
+    - max_tokens 500 (enough for detail, not too long)
+    - No-markdown system prompt
+    """
+    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY):
+        return "⚠️ ระบบ AI ยังไม่ได้ตั้งค่า"
+
+    essential = build_context_snapshot(current_data, LINE_CONTEXT_FIELDS)
+    trimmed_faults = recent_faults[-3:] if recent_faults else []
+
+    system_prompt = (
+        "คุณคือผู้ช่วย AI ดูแลระบบไฟฟ้า PM2000 ตอบผ่าน LINE (มือถือ)\n"
+        "กฎ:\n"
+        "1. ตอบได้ 8-10 บรรทัด ครบถ้วนแต่ไม่เยิ่นเย้อ\n"
+        "2. ห้ามใช้ Markdown (**, ##, ###, -) ใช้ Emoji แทน เช่น ⚡🔴🟢📊🔧\n"
+        "3. ภาษาไทย เป็นกันเอง เหมือนช่างไฟฟ้าคุยกัน\n"
+        "4. ถ้าถามค่า ให้แสดงตัวเลขครบ พร้อมบอกว่าปกติหรือผิดปกติ\n"
+        "5. ถ้ามี Fault ให้สรุปสาเหตุ + คำแนะนำ 2-3 ข้อ\n\n"
+        f"ค่ามิเตอร์ล่าสุด: {json.dumps(essential, ensure_ascii=False)}\n"
+        f"Fault ล่าสุด: {json.dumps(trimmed_faults, ensure_ascii=False)}"
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+    payload = {
+        "messages": messages,
+        "temperature": 0.4,
+        "max_tokens": 500,
+    }
+
+    try:
+        return await robust_ai_call(messages, payload)
+    except Exception as e:
+        logger.error(f"LINE Chat AI failed: {e}")
+        return "❌ AI มีปัญหา ลองใหม่อีกครั้งนะครับ"
+
 
 
 async def _call_dashscope_api_stream(payload: Dict[str, Any]) -> AsyncIterator[str]:

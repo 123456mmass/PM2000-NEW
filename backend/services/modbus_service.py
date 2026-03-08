@@ -17,6 +17,8 @@ from core import state
 from pm2230_client import PM2230Client
 from fault_engine import diagnose_faults
 
+from ai_analyzer import generate_line_fault_analysis
+
 logger = logging.getLogger("PM2230_API")
 
 # ============================================================================
@@ -406,6 +408,25 @@ def _read_fast_block(client) -> dict:
     return result
 
 
+async def _send_smart_line(alerts: List[Dict], data: Dict, base_msg: str):
+    """
+    Helper to fetch AI analysis and append to LINE message without blocking.
+    """
+    try:
+        # Prompt AI for analysis with an 8s timeout to ensure prompt delivery
+        ai_advice = await asyncio.wait_for(
+            generate_line_fault_analysis(alerts, data),
+            timeout=8.0
+        )
+        if ai_advice:
+            base_msg += f"\n\n🤖 AI วิเคราะห์:\n{ai_advice}"
+    except asyncio.TimeoutError:
+        logger.warning("LINE AI analysis timed out (8s)")
+    except Exception as e:
+        logger.error(f"Error in _send_smart_line AI call: {e}")
+
+    await send_line_message(base_msg)
+
 async def poll_modbus_data():
     global last_line_notify_time, last_sent_fault_categories
     init_csv_file()
@@ -548,7 +569,10 @@ async def poll_modbus_data():
                             ]
                             full_msg = "\n🚨 [FAULT DETECTED] PM2000\n" + "\n".join(alert_msgs)
                             full_msg += f"\n⏰ เวลา: {datetime.now().strftime('%H:%M:%S')}"
-                            asyncio.create_task(send_line_message(full_msg))
+                            
+                            # Use smart helper to add AI analysis before sending
+                            asyncio.create_task(_send_smart_line(_alerts.get("alerts", []), flat_data, full_msg))
+                            
                             last_line_notify_time = now
                             last_sent_fault_categories = current_fault_categories
 

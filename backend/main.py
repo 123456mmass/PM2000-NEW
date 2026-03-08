@@ -39,7 +39,7 @@ logger = logging.getLogger("PM2230_API")
 # Import Core modules and Routers
 # ============================================================================
 from core import state
-from routes import meter, system, ai
+from routes import meter, system, ai, line_webhook
 from services.modbus_service import poll_modbus_data, auto_connect
 from predictive_maintenance import PredictiveMaintenance
 from predictive_maintenance_external import ExternalPredictiveMaintenance
@@ -72,6 +72,21 @@ async def lifespan(app: FastAPI):
             state.tunnel_url = result.tunnel
             state.tunnel_ready = True
             logger.info(f"🌐 Tunnel ready: {state.tunnel_url}")
+            logger.info(f"📱 Webhook Target: {state.tunnel_url}/api/line/webhook")
+            
+            # รอให้ Server พร้อมรับ Request ก่อน แล้วค่อยอัปเดต Webhook
+            import time
+            from routes.line_webhook import set_line_webhook
+            webhook = f"{state.tunnel_url.strip()}/api/line/webhook"
+            for attempt in range(1, 4):
+                time.sleep(10)  # รอ 10 วินาทีให้แน่ใจว่า Server + Tunnel พร้อม
+                logger.info(f"📱 Auto-update LINE Webhook attempt {attempt}/3...")
+                try:
+                    success = asyncio.run(set_line_webhook(webhook))
+                    if success:
+                        break
+                except Exception as e:
+                    logger.warning(f"📱 Attempt {attempt} failed: {e}")
         except Exception as e:
             logger.warning(f"🌐 Tunnel failed to start: {e}")
             state.tunnel_ready = True
@@ -154,6 +169,7 @@ app.add_middleware(
 app.include_router(meter.router)
 app.include_router(system.router)
 app.include_router(ai.router)
+app.include_router(line_webhook.router)
 
 # ============================================================================
 # Build & Mount Frontend Static Files
