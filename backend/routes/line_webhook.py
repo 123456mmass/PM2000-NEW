@@ -21,6 +21,8 @@ logger = logging.getLogger("PM2230_API")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_USER_ID = os.getenv("LINE_USER_ID", "") # Original User ID for fallback push
+PROXY_URL = os.getenv("PROXY_URL", "").rstrip("/")
+PROXY_APP_KEY = os.getenv("PROXY_APP_KEY", "")
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
@@ -57,6 +59,27 @@ def _load_recent_faults_simple(limit: int = 5) -> List[Dict]:
 
 async def _line_reply(reply_token: str, text: str) -> bool:
     """Sends a reply message via LINE Reply API."""
+    # --- PROXY MODE ---
+    if PROXY_URL:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    f"{PROXY_URL}/proxy/line/reply",
+                    headers={"X-App-Key": PROXY_APP_KEY},
+                    json={"reply_token": reply_token, "text": text}
+                )
+                if resp.status_code == 200:
+                    logger.info("LINE Reply sent via Proxy.")
+                    return True
+                else:
+                    logger.error(f"Proxy LINE Reply failed: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"Proxy LINE Reply error: {e}")
+        # Fallback to direct if token exists
+        if not LINE_CHANNEL_ACCESS_TOKEN:
+            return False
+
+    # --- DIRECT MODE ---
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
@@ -79,6 +102,26 @@ async def _line_reply(reply_token: str, text: str) -> bool:
 
 async def _line_push(user_id: str, text: str):
     """Fallback: sends a push message via LINE Push API."""
+    # --- PROXY MODE ---
+    if PROXY_URL:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    f"{PROXY_URL}/proxy/line/push",
+                    headers={"X-App-Key": PROXY_APP_KEY},
+                    json={"text": text, "user_id": user_id}
+                )
+                if resp.status_code == 200:
+                    logger.info("LINE Push sent via Proxy.")
+                    return
+                else:
+                    logger.error(f"Proxy LINE Push failed: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"Proxy LINE Push error: {e}")
+        if not LINE_CHANNEL_ACCESS_TOKEN:
+            return
+
+    # --- DIRECT MODE ---
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
@@ -162,6 +205,30 @@ async def line_webhook(request: Request):
 
 async def set_line_webhook(webhook_url: str) -> bool:
     """สั่ง LINE Platform ให้ส่ง Webhook มาที่ URL นี้อัตโนมัติ"""
+    # --- PROXY MODE ---
+    if PROXY_URL:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.put(
+                    f"{PROXY_URL}/proxy/line/webhook",
+                    headers={"X-App-Key": PROXY_APP_KEY, "Content-Type": "application/json"},
+                    json={"webhook_url": webhook_url}
+                )
+                if resp.status_code == 200:
+                    logger.info(f"✅ Auto-updated LINE Webhook via Proxy to: {webhook_url}")
+                    return True
+                else:
+                    logger.error(f"❌ Proxy LINE Webhook update failed: {resp.status_code} {resp.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"❌ Error updating LINE Webhook via Proxy: {e}")
+            return False
+
+    # --- DIRECT MODE ---
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        logger.info("Skipping LINE webhook update (no token)")
+        return False
+
     url = "https://api.line.me/v2/bot/channel/webhook/endpoint"
     headers = {
         "Content-Type": "application/json",

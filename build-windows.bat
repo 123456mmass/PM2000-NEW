@@ -21,31 +21,7 @@ if not exist frontend\.env.local (
     copy frontend\.env.example frontend\.env.local
 )
 
-:: Always Prompt for AI Keys
-echo.
-echo ==============================================
-echo  AI API Key Configuration
-echo  (Leave blank to keep existing key)
-echo ==============================================
-set "api_key="
-set /p api_key="Please enter your Mistral API Key: "
-set "trimmed_api_key=!api_key: =!"
-if defined api_key if not "!trimmed_api_key!"=="" (
-    powershell -Command "$content = Get-Content backend\.env; $newContent = $content -replace 'MISTRAL_API_KEY=.*', ('MISTRAL_API_KEY=' + '!api_key!'); Set-Content backend\.env $newContent"
-    echo [OK] MISTRAL_API_KEY updated in backend\.env
-) else (
-    echo [INFO] Keeping existing MISTRAL_API_KEY.
-)
 
-set "api_key="
-set /p api_key="Please enter your DashScope API Key: "
-set "trimmed_api_key=!api_key: =!"
-if defined api_key if not "!trimmed_api_key!"=="" (
-    powershell -Command "$content = Get-Content backend\.env; $newContent = $content -replace 'DASHSCOPE_API_KEY=.*', ('DASHSCOPE_API_KEY=' + '!api_key!'); Set-Content backend\.env $newContent"
-    echo [OK] DASHSCOPE_API_KEY updated in backend\.env
-) else (
-    echo [INFO] Keeping existing DASHSCOPE_API_KEY.
-)
 
 :: 1. Setup Backend
 echo [1/3] Setting up Python Backend...

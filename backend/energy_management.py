@@ -129,22 +129,28 @@ class EnergyManagement:
         self.api_key = os.getenv("DASHSCOPE_API_KEY")
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY")
         self.mistral_agent_id = os.getenv("MISTRAL_AGENT_ID", "ag_019cba5df5fe7113ab3b3164627ec5db")
+        self.proxy_url = os.getenv("PROXY_URL", "").rstrip("/")
+        self.proxy_app_key = os.getenv("PROXY_APP_KEY", "")
         self.client = httpx.AsyncClient()
         self.mistral_client = None
         
-        if self.mistral_api_key and "your_key" not in self.mistral_api_key:
+        # Skip SDK init if using Proxy mode
+        if not self.proxy_url and self.mistral_api_key and "your_key" not in self.mistral_api_key:
             try:
                 from mistralai import Mistral
                 self.mistral_client = Mistral(api_key=self.mistral_api_key)
             except Exception as e:
                 logger.error(f"Failed to initialize Mistral client: {e}")
         
-        if not self.api_endpoint:
-            logger.warning("DASHSCOPE_API_BASE not configured")
-        if not self.api_key:
-            logger.warning("DASHSCOPE_API_KEY not configured")
-        if not self.mistral_api_key:
-            logger.warning("MISTRAL_API_KEY not configured")
+        if self.proxy_url:
+            logger.info("Energy Management: Using Proxy mode")
+        else:
+            if not self.api_endpoint:
+                logger.warning("DASHSCOPE_API_BASE not configured")
+            if not self.api_key:
+                logger.warning("DASHSCOPE_API_KEY not configured")
+            if not self.mistral_api_key:
+                logger.warning("MISTRAL_API_KEY not configured")
         
     def _load_config(self) -> Dict:
         """
@@ -313,14 +319,33 @@ class EnergyManagement:
            retry=retry_if_exception(should_retry))
     async def _call_ai_api(self, messages: List[Dict[str, str]]) -> str:
         """
-        Call AI API (Mistral or DashScope)
+        Call AI API (Proxy, Mistral, or DashScope)
         """
+        # --- PROXY MODE ---
+        if self.proxy_url:
+            logger.info("Calling AI via Proxy (parallel mode)...")
+            headers = {
+                "Content-Type": "application/json",
+                "X-App-Key": self.proxy_app_key
+            }
+            payload = {
+                "messages": messages,
+                "max_tokens": 1500,
+                "temperature": 0.2,
+                "mode": "parallel"
+            }
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(f"{self.proxy_url}/proxy/ai", headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                logger.info(f"Proxy AI response: source={data.get('source')}, mode={data.get('mode')}")
+                return data["content"]
+
+        # --- DIRECT MODE ---
         try:
-            # ใช้ Mistral AI เป็นหลัก
             if self.mistral_client:
                 logger.info("Calling Mistral AI (Primary)...")
                 return await self._call_mistral_api(messages)
-            # ใช้ DashScope เป็น fallback
             else:
                 logger.info("Calling DashScope AI (Fallback)...")
                 payload = {

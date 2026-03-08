@@ -17,11 +17,12 @@ import time
 import httpx
 from typing import AsyncIterator, Dict, Any, List, Optional, Tuple
 from functools import lru_cache
+import asyncio
 
 import logging
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from mistralai import Mistral
-from llm_parallel import ParallelLLMRouter, get_parallel_router, QualityScorer
+
 
 # ============================================================================
 # Cache Configuration
@@ -33,6 +34,8 @@ CHAT_HISTORY_LIMIT = max(2, int(os.getenv("AI_CHAT_HISTORY_LIMIT", "8")))
 CHAT_FAULT_LIMIT = max(1, int(os.getenv("AI_CHAT_FAULT_LIMIT", "3")))
 CHAT_MAX_TOKENS = max(256, int(os.getenv("AI_CHAT_MAX_TOKENS", "600")))
 SUMMARY_MAX_TOKENS = max(512, int(os.getenv("AI_SUMMARY_MAX_TOKENS", "1000")))
+PROXY_URL = os.getenv("PROXY_URL", "").rstrip("/")
+PROXY_APP_KEY = os.getenv("PROXY_APP_KEY", "")
 
 # In-memory cache: {cache_key: (result, timestamp)}
 _cache: Dict[str, Tuple[str, float]] = {}
@@ -414,16 +417,78 @@ async def _call_dashscope_api(payload: Dict[str, Any], use_fallback: bool = Fals
         return content
 
 
+async def _call_proxy_ai(
+    messages: List[Dict[str, str]], 
+    max_tokens: int = 600, 
+    temperature: float = 0.4,
+    mode: str = "single"
+) -> str:
+    """
+    Routes AI chat requests through the VPS Proxy Server.
+    mode="single": Mistral primary, DashScope fallback
+    """
+    if not PROXY_URL:
+        raise ValueError("PROXY_URL is not configured")
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-App-Key": PROXY_APP_KEY
+    }
+    payload = {
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "mode": mode
+    }
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            resp = await client.post(f"{PROXY_URL}/proxy/ai", headers=headers, json=payload)
+            if resp.status_code == 403:
+                logger.error("Proxy Authentication Failed: Invalid PROXY_APP_KEY")
+                return "❌ Proxy Auth Failed: คีย์แอปไม่ถูกต้อง"
+            if resp.status_code == 429:
+                return "⚠️ Proxy Rate Limit: ยิงถี่เกินไป รอสักครู่นะครับ"
+            
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info(f"Proxy AI response: source={data.get('source')}, mode={data.get('mode')}")
+            return data["content"]
+        except Exception as e:
+            logger.error(f"Proxy AI Error: {e}")
+            raise e
+
 async def robust_ai_call(messages: List[Dict[str, str]], dashscope_payload_base: Dict[str, Any] = None) -> str:
     """
     Highly robust entry point:
-    1. Try Mistral AI Agent (Primary)
-    2. Try DashScope Qwen (Fallback primary)
-    3. Try DashScope Qwen Max (Fallback secondary)
+    1. Check for Proxy Mode (if PROXY_URL is set)
+    2. Try Mistral AI Agent (Direct Primary)
+    3. Try DashScope Qwen (Direct Fallback primary)
+    4. Try DashScope Qwen Max (Direct Fallback secondary)
     """
-    
+    # --- PROXY MODE ---
+    if PROXY_URL:
+        try:
+            # Extract common params from dashscope_payload_base if exists
+            max_tokens = 600
+            temp = 0.4
+            mode = "single"  # Forced to single mode for everything
+            if dashscope_payload_base:
+                max_tokens = dashscope_payload_base.get("max_tokens", 600)
+                temp = dashscope_payload_base.get("temperature", 0.4)
+            
+            logger.info(f"Calling AI via Proxy ({mode} mode)...")
+            return await _call_proxy_ai(messages, max_tokens=max_tokens, temperature=temp, mode=mode)
+        except Exception as e:
+            logger.error(f"Proxy AI call failed: {e}")
+            # If we have no direct keys, we must fail here
+            if not (MISTRAL_API_KEY or DASHSCOPE_API_KEY):
+                return f"❌ Proxy Error: {str(e)}"
+            logger.info("Proxy failed but direct keys available. Falling back to direct mode...")
+
+    # --- DIRECT MODE ---
     # 1. Try Mistral
-    if MISTRAL_API_KEY:
+    if MISTRAL_API_KEY and "your_key" not in MISTRAL_API_KEY:
         @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5),
                retry=retry_if_exception(should_retry))
         async def try_mistral():
@@ -502,7 +567,7 @@ async def generate_power_summary(data: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not api_key:
+    if not api_key and not PROXY_URL:
         error_msg = "⚠️ กรุณาตั้งค่า DASHSCOPE_API_KEY ในไฟล์ .env ของ Backend ก่อนใช้งานฟังก์ชัน AI"
         return {
             "summary": error_msg,
@@ -643,7 +708,7 @@ async def generate_fault_summary(fault_records: List[Dict[str, str]]) -> Dict[st
     logger.info(f"Cache MISS: {cache_key}... - calling AI API for fault summary")
 
     api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not api_key:
+    if not api_key and not PROXY_URL:
         error_msg = "⚠️ กรุณาตั้งค่า DASHSCOPE_API_KEY ในไฟล์ .env ของ Backend ก่อนใช้งานฟังก์ชัน AI"
         return {
             "summary": error_msg,
@@ -789,7 +854,7 @@ async def generate_english_report(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"summary": f"❌ Data Error: {error_msg}", "is_cached": False, "cache_key": cache_key}
 
     api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not api_key:
+    if not api_key and not PROXY_URL:
         return {"summary": "⚠️ DASHSCOPE_API_KEY is missing.", "is_cached": False, "cache_key": cache_key}
 
     model = os.getenv("DASHSCOPE_MODEL", DEFAULT_MODEL)
@@ -866,7 +931,7 @@ async def generate_chat_response(messages: List[Dict[str, str]], current_data: D
     """
     Handles conversational AI chat with electrical context.
     """
-    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY):
+    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY or PROXY_URL):
         return "⚠️ กรุณาตั้งค่า DASHSCOPE_API_KEY หรือ MISTRAL_API_KEY ก่อนใช้งานแชท AI"
 
     full_messages = build_chat_messages(messages, current_data, recent_faults)
@@ -875,20 +940,6 @@ async def generate_chat_response(messages: List[Dict[str, str]], current_data: D
         "temperature": 0.4,
         "max_tokens": CHAT_MAX_TOKENS,
     }
-
-    router = _get_or_init_parallel_router()
-    if router and len(router.providers) >= 2:
-        try:
-            race_result = await router.generate_with_race(
-                messages=full_messages,
-                max_tokens=CHAT_MAX_TOKENS,
-                temperature=0.4,
-                top_p=0.9,
-            )
-            if race_result.get("success"):
-                return race_result.get("content", "")
-        except Exception as e:
-            logger.warning(f"Chat race mode failed, falling back to sequential: {e}")
 
     try:
         return await robust_ai_call(full_messages, payload)
@@ -912,7 +963,7 @@ async def generate_line_chat_response(
     - max_tokens 500 (enough for detail, not too long)
     - No-markdown system prompt
     """
-    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY):
+    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY or PROXY_URL):
         return "⚠️ ระบบ AI ยังไม่ได้ตั้งค่า"
 
     essential = build_context_snapshot(current_data, LINE_CONTEXT_FIELDS)
@@ -938,6 +989,7 @@ async def generate_line_chat_response(
         "messages": messages,
         "temperature": 0.4,
         "max_tokens": 500,
+        "mode": "single"  # Force single mode (Mistral) for LINE chat to avoid timeout
     }
 
     try:
@@ -948,31 +1000,32 @@ async def generate_line_chat_response(
 
 
 
-async def _call_dashscope_api_stream(payload: Dict[str, Any]) -> AsyncIterator[str]:
-    if not DASHSCOPE_API_KEY:
-        raise ValueError("DASHSCOPE_API_KEY is missing")
+async def _call_proxy_stream(payload: Dict[str, Any]) -> AsyncIterator[str]:
+    if not PROXY_URL:
+        raise ValueError("PROXY_URL is missing for stream")
 
     stream_payload = payload.copy()
-    stream_payload["model"] = DEFAULT_MODEL
     stream_payload["stream"] = True
+    # Force single mode for streaming chat to ensure fast response
+    stream_payload["mode"] = "single"
 
     headers = {
-        "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
         "Content-Type": "application/json",
+        "X-App-Key": PROXY_APP_KEY
     }
     timeout = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream(
             "POST",
-            f"{DASHSCOPE_API_BASE}/chat/completions",
+            f"{PROXY_URL}/proxy/ai",
             headers=headers,
             json=stream_payload,
         ) as response:
             if response.status_code != 200:
                 error_text = (await response.aread()).decode("utf-8", errors="replace")
                 raise httpx.HTTPStatusError(
-                    f"DashScope stream error: {response.status_code} - {error_text}",
+                    f"Proxy stream error: {response.status_code} - {error_text}",
                     request=response.request,
                     response=response,
                 )
@@ -991,6 +1044,14 @@ async def _call_dashscope_api_stream(payload: Dict[str, Any]) -> AsyncIterator[s
                     logger.warning(f"Skipping non-JSON stream chunk: {raw_data[:120]}")
                     continue
 
+                # 1. Mistral Agents API stream format
+                if event.get("type") == "message.output.delta":
+                    content = event.get("content")
+                    if content:
+                        yield content
+                    continue
+
+                # 2. OpenAI / DashScope stream format
                 choices = event.get("choices") or []
                 if not choices:
                     continue
@@ -1025,7 +1086,7 @@ async def stream_chat_response(
     current_data: Dict[str, Any],
     recent_faults: List[Dict[str, Any]],
 ) -> AsyncIterator[str]:
-    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY):
+    if not (DASHSCOPE_API_KEY or MISTRAL_API_KEY or PROXY_URL):
         yield "⚠️ กรุณาตั้งค่า DASHSCOPE_API_KEY หรือ MISTRAL_API_KEY ก่อนใช้งานแชท AI"
         return
 
@@ -1038,14 +1099,14 @@ async def stream_chat_response(
     }
 
     streamed_any = False
-    if DASHSCOPE_API_KEY:
+    if PROXY_URL:
         try:
-            async for chunk in _call_dashscope_api_stream(payload):
+            async for chunk in _call_proxy_stream(payload):
                 streamed_any = True
                 yield chunk
             if streamed_any:
                 return
-            raise ValueError("DashScope stream returned empty content")
+            raise ValueError("Proxy stream returned empty content")
         except Exception as e:
             logger.warning(f"Chat stream failed, falling back to buffered response: {e}")
             if streamed_any:
@@ -1058,166 +1119,17 @@ async def stream_chat_response(
 # Parallel LLM Generation - เรียกหลาย AI พร้อมกัน
 # ============================================================================
 
-# Global router instance
-_parallel_router: Optional[ParallelLLMRouter] = None
-
-def _get_or_init_parallel_router() -> Optional[ParallelLLMRouter]:
-    """Initialize parallel router with available providers"""
-    global _parallel_router
-    
-    if _parallel_router is not None:
-        return _parallel_router
-    
-    router = ParallelLLMRouter()
-    
-    # Register Mistral if available
-    if mistral_client and MISTRAL_API_KEY and "your_key" not in MISTRAL_API_KEY:
-        async def mistral_call(messages: List[Dict[str, str]], **kwargs) -> str:
-            return await _call_mistral_api(messages)
-        router.register_provider("mistral", mistral_call)
-    
-    # Register DashScope Primary (qwen3.5-plus)
-    if DASHSCOPE_API_KEY:
-        async def dashscope_primary_call(messages: List[Dict[str, str]], **kwargs) -> str:
-            payload = {
-                "messages": messages,
-                "model": DEFAULT_MODEL,
-                "max_tokens": SUMMARY_MAX_TOKENS,
-                "temperature": float(kwargs.get("temperature", 0.2)),
-                "top_p": 0.9,
-                "presence_penalty": 0.0,
-                "frequency_penalty": 0.0
-            }
-            return await _call_dashscope_api(payload, use_fallback=False)
-        router.register_provider("dashscope_primary", dashscope_primary_call)
-        
-        # Register DashScope Fallback (qwen-max)
-        async def dashscope_fallback_call(messages: List[Dict[str, str]], **kwargs) -> str:
-            payload = {
-                "messages": messages,
-                "model": FALLBACK_MODEL,
-                "max_tokens": SUMMARY_MAX_TOKENS,
-                "temperature": float(kwargs.get("temperature", 0.2)),
-                "top_p": 0.9,
-                "presence_penalty": 0.0,
-                "frequency_penalty": 0.0
-            }
-            return await _call_dashscope_api(payload, use_fallback=True)
-        router.register_provider("dashscope_fallback", dashscope_fallback_call)
-    
-    if len(router.providers) >= 2:
-        _parallel_router = router
-        logger.info(f"Parallel LLM Router initialized with {len(router.providers)} providers")
-        return _parallel_router
-    else:
-        logger.warning(f"Not enough providers for parallel mode ({len(router.providers)} available)")
-        return None
-
 
 async def generate_power_summary_parallel(
     data: Dict[str, Any],
     selection_strategy: str = "quality"
 ) -> Dict[str, Any]:
     """
-    เธงเธดเน€เธเธฃเธฒเธฐเธซเนเธเนเธญเธกเธนเธฅเธ”เนเธงเธข AI เธซเธฅเธฒเธขเธ•เธฑเธงเธเธฃเนเธญเธกเธเธฑเธ (Parallel Mode)
+    Parallel Mode was disabled to save resources and improve stability. 
+    This now securely forwards to the single robust mode.
     """
-    data_hash = create_data_hash(data)
-    cache_key = f"ai_par_{data_hash[:8]}"
-
-    cached_result = get_from_cache(cache_key)
-    if cached_result is not None:
-        return {
-            "summary": cached_result,
-            "is_cached": True,
-            "cache_key": cache_key,
-            "provider": "cache",
-            "parallel_info": None
-        }
-
-    is_valid, error_msg = validate_input_data(data)
-    if not is_valid:
-        return {
-            "summary": f"โ เธเนเธญเธกเธนเธฅเนเธกเนเธ–เธนเธเธ•เนเธญเธ: {error_msg}",
-            "is_cached": False,
-            "cache_key": cache_key
-        }
-
-    router = _get_or_init_parallel_router()
-    if not router or len(router.providers) < 2:
-        logger.info("Not enough providers for parallel, using sequential mode")
-        return await generate_power_summary(data)
-
-    anomalies = check_anomalies(data)
-    anomaly_text = "\n".join(anomalies) if anomalies else "โ… เธเธเธ•เธด (เนเธกเนเธกเธต Anomaly Alert)"
-    essential_data = build_context_snapshot(data, SUMMARY_CONTEXT_FIELDS)
-
-    prompt = f"""
-เธเธธเธ“เธเธทเธญเธงเธดเธจเธงเธเธฃเธเธฃเธฐเธ¥เนเธเธเนเธฒเธ—เธตเนเธเนเธงเธขเธชเธฃเธธเธเธชเธ–เธฒเธเธฐเธฃเธฐเธเธเธเธฒเธ PM2230 เธเธฒเธเธเนเธญเธกเธนเธฅเธ”เนเธฒเธเธฅเนเธฒเธ
-
-Anomalies:
-{anomaly_text}
-
-Snapshot:
-{json.dumps(essential_data, ensure_ascii=False, indent=2)}
-
-เธฃเธนเธเนเธเธเธเธณเธ•เธญเธ:
-1. เธชเธฃเธธเธเธ เธฒเธเธฃเธงเธกเธชเธฑเนเธๆ
-2. เธเธธเธ”เธ—เธตเนเธ•เนเธญเธเธฃเธฐเธงเธฑเธ
-3. เธเธณเนเธเธฐเธเธณเธ—เธตเนเธเธงเธฃเธ—เธณเธ•เนเธญ
-4. เธ•เธญเธเน€เธเนเธเธ เธฒเธฉเธฒเนเธ—เธข เธเธฃเธฐเธเธฑเธ เนเธ•เนเธขเธฑเธเธเธเธเธงเธฒเธกเธถเธเธ—เธฒเธเน€เธ—เธเธเธดเธ
-"""
-
-    messages = [
-        {
-            "role": "system",
-            "content": "You are a helpful electrical engineering assistant specializing in power quality analysis. Always respond in Thai with concise technical accuracy using Markdown.",
-        },
-        {"role": "user", "content": prompt},
-    ]
-
-    request_kwargs = {
-        "max_tokens": SUMMARY_MAX_TOKENS,
-        "temperature": 0.2,
-        "top_p": 0.9,
-    }
-
-    try:
-        logger.info(f"Starting parallel LLM generation with strategy: {selection_strategy}")
-        if selection_strategy == "race":
-            result = await router.generate_with_race(messages=messages, **request_kwargs)
-        else:
-            result = await router.generate_parallel(
-                messages=messages,
-                task_type="power_analysis",
-                selection_strategy=selection_strategy,
-                **request_kwargs,
-            )
-
-        if result["success"]:
-            content = result["content"]
-            save_to_cache(cache_key, content)
-
-            metadata_note = f"\n\n*AI provider: {result['provider']} | latency: {result.get('latency', 0):.2f}s*"
-            response = {
-                "summary": content + metadata_note,
-                "is_cached": False,
-                "cache_key": cache_key,
-                "provider": result["provider"],
-                "latency": result.get("latency"),
-                "parallel_mode": True,
-            }
-            if result.get("quality_score") is not None:
-                response["quality_score"] = result.get("quality_score")
-            if result.get("all_results"):
-                response["all_providers"] = result.get("all_results", [])
-            return response
-
-        logger.warning("Parallel generation failed, falling back to sequential")
-        return await generate_power_summary(data)
-
-    except Exception as e:
-        logger.error(f"Parallel generation error: {e}")
-        return await generate_power_summary(data)
+    logger.info("Parallel mode disabled, using robust single mode for summarization.")
+    return await generate_power_summary(data)
 
 # Alias for easy import
 generate_power_summary_parallel_mode = generate_power_summary_parallel

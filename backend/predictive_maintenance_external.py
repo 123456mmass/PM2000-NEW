@@ -128,22 +128,28 @@ class ExternalPredictiveMaintenance:
         self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY")
         self.mistral_agent_id = os.getenv("MISTRAL_AGENT_ID", "ag_019cba5df5fe7113ab3b3164627ec5db")
+        self.proxy_url = os.getenv("PROXY_URL", "").rstrip("/")
+        self.proxy_app_key = os.getenv("PROXY_APP_KEY", "")
         self.client = httpx.AsyncClient()
         self.mistral_client = None
         
-        if self.mistral_api_key and "your_key" not in self.mistral_api_key:
+        # Skip SDK init if using Proxy mode
+        if not self.proxy_url and self.mistral_api_key and "your_key" not in self.mistral_api_key:
             try:
                 from mistralai import Mistral
                 self.mistral_client = Mistral(api_key=self.mistral_api_key)
             except Exception as e:
                 logger.error(f"Failed to initialize Mistral client: {e}")
         
-        if not self.api_endpoint:
-            logger.warning("DASHSCOPE_API_BASE not configured")
-        if not self.api_key:
-            logger.warning("DASHSCOPE_API_KEY not configured")
-        if not self.mistral_api_key:
-            logger.warning("MISTRAL_API_KEY not configured")
+        if self.proxy_url:
+            logger.info("Predictive Maintenance: Using Proxy mode")
+        else:
+            if not self.api_endpoint:
+                logger.warning("DASHSCOPE_API_BASE not configured")
+            if not self.api_key:
+                logger.warning("DASHSCOPE_API_KEY not configured")
+            if not self.mistral_api_key:
+                logger.warning("MISTRAL_API_KEY not configured")
     
     def should_retry(self, exception):
         """
@@ -232,7 +238,7 @@ class ExternalPredictiveMaintenance:
         Returns:
             ผลลัพธ์การทำนาย
         """
-        if not self.mistral_client and (not self.api_endpoint or not self.api_key):
+        if not self.proxy_url and not self.mistral_client and (not self.api_endpoint or not self.api_key):
             return {
                 "status": "error",
                 "message": "No AI model configured",
@@ -330,11 +336,31 @@ class ExternalPredictiveMaintenance:
         ]
 
         try:
-            # ใช้ Mistral AI เป็นหลัก
-            if self.mistral_client:
+            # --- PROXY MODE ---
+            if self.proxy_url:
+                logger.info("Calling AI via Proxy (parallel mode)...")
+                proxy_headers = {
+                    "Content-Type": "application/json",
+                    "X-App-Key": self.proxy_app_key
+                }
+                proxy_payload = {
+                    "messages": messages,
+                    "max_tokens": 1500,
+                    "temperature": 0.2,
+                    "mode": "parallel"
+                }
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(f"{self.proxy_url}/proxy/ai", headers=proxy_headers, json=proxy_payload)
+                    resp.raise_for_status()
+                    proxy_data = resp.json()
+                    content = proxy_data["content"]
+                    ai_source = proxy_data.get("source", "proxy")
+                    logger.info(f"Proxy AI response: source={ai_source}")
+            # --- DIRECT MODE ---
+            elif self.mistral_client:
                 logger.info("Calling Mistral AI (Primary)...")
                 content = await self._call_mistral_api(messages)
-            # ใช้ DashScope เป็น fallback
+                ai_source = "Mistral"
             else:
                 logger.info("Calling DashScope AI (Fallback)...")
                 payload = {
@@ -360,6 +386,7 @@ class ExternalPredictiveMaintenance:
                 content = result["choices"][0]["message"]["content"]
                 if not content:
                     raise ValueError("DashScope returned empty content")
+                ai_source = "DashScope"
 
             # บันทึกผลลัพธ์ลง cache
             save_to_cache(cache_key, json.dumps({
@@ -368,8 +395,8 @@ class ExternalPredictiveMaintenance:
                 "confidence": 0.9 if ("ต้องการการบำรุงรักษา" in content or "อันตราย" in content) else 0.7 if "เตือน" in content else 0.3,
                 "message": content,
                 "details": {
-                    "model": "Mistral" if self.mistral_client else payload["model"],
-                    "tokens_used": 0  # Mistral SDK doesn't provide token count in current version
+                    "model": ai_source,
+                    "tokens_used": 0
                 }
             }))
 
@@ -379,7 +406,7 @@ class ExternalPredictiveMaintenance:
                 "confidence": 0.9 if ("ต้องการการบำรุงรักษา" in content or "อันตราย" in content) else 0.7 if "เตือน" in content else 0.3,
                 "message": content,
                 "details": {
-                    "model": "Mistral" if self.mistral_client else "DashScope",
+                    "model": ai_source,
                     "tokens_used": 0
                 },
                 "is_cached": False,

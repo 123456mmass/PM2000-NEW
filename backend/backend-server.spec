@@ -29,6 +29,10 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# Filter out test files from pure python modules
+a.pure = [x for x in a.pure if not x[0].startswith('test_') and not x[0].startswith('proxy_test')]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

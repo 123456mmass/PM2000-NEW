@@ -22,18 +22,7 @@ if [ ! -f "$ROOT_DIR/frontend/.env.local" ]; then
     echo "  Created frontend/.env.local from example"
 fi
 
-echo ""
-echo "=============================================="
-echo " DashScope AI API Key Configuration"
-echo " (Leave blank to keep existing key)"
-echo "=============================================="
-read -p "Please enter your DashScope API Key: " api_key
-if [ ! -z "$api_key" ]; then
-    sed -i "s/DASHSCOPE_API_KEY=.*/DASHSCOPE_API_KEY=$api_key/" "$ROOT_DIR/backend/.env"
-    echo "[OK] API Key updated in backend/.env"
-else
-    echo "[INFO] Keeping existing API Key."
-fi
+
 
 # ── 1. Python Backend ──────────────────────────────────────────────────────────
 echo ""

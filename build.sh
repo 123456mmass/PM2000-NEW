@@ -16,32 +16,7 @@ if [ ! -f backend/.env ]; then
     cp backend/.env.example backend/.env
 fi
 
-# Prompt for AI keys
-echo ""
-echo "=============================================="
-echo " AI API Key Configuration"
-echo " (Leave blank to keep existing key)"
-echo "=============================================="
 
-api_key=""
-IFS= read -r -p "Please enter your Mistral API Key: " api_key
-trimmed_api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
-if [ -n "$trimmed_api_key" ]; then
-    sed -i "s/MISTRAL_API_KEY=.*/MISTRAL_API_KEY=$api_key/" backend/.env
-    echo "[OK] MISTRAL_API_KEY updated in backend/.env"
-else
-    echo "[INFO] Keeping existing MISTRAL_API_KEY."
-fi
-
-api_key=""
-IFS= read -r -p "Please enter your DashScope API Key: " api_key
-trimmed_api_key="$(printf '%s' "$api_key" | tr -d '[:space:]')"
-if [ -n "$trimmed_api_key" ]; then
-    sed -i "s/DASHSCOPE_API_KEY=.*/DASHSCOPE_API_KEY=$api_key/" backend/.env
-    echo "[OK] DASHSCOPE_API_KEY updated in backend/.env"
-else
-    echo "[INFO] Keeping existing DASHSCOPE_API_KEY."
-fi
 
 if [ ! -f frontend/.env.local ]; then
     echo "Creating frontend/.env.local from example..."

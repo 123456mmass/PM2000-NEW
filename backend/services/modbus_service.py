@@ -146,7 +146,29 @@ last_line_notify_time = 0
 last_sent_fault_categories = set()
 LINE_NOTIFY_COOLDOWN = 60
 
+PROXY_URL = os.getenv("PROXY_URL", "").rstrip("/")
+PROXY_APP_KEY = os.getenv("PROXY_APP_KEY", "")
+
 async def send_line_message(message: str) -> None:
+    # --- PROXY MODE ---
+    if PROXY_URL:
+        headers = {"X-App-Key": PROXY_APP_KEY}
+        payload = {"text": message, "user_id": LINE_USER_ID}
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(f"{PROXY_URL}/proxy/line/push", headers=headers, json=payload)
+                if resp.status_code == 200:
+                    logger.info("Line notification sent successfully via Proxy.")
+                else:
+                    logger.error(f"Failed to send Proxy Line notification: {resp.status_code} - {resp.text}")
+            return
+        except Exception as e:
+            logger.error(f"Proxy Line Push Error: {e}")
+            # Fallback to direct mode if keys exist, otherwise return
+            if not LINE_CHANNEL_ACCESS_TOKEN:
+                return
+
+    # --- DIRECT MODE ---
     if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
         logger.warning("Line Messaging API Token or User ID missing. Cannot send push message.")
         return

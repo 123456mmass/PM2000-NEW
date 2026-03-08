@@ -19,14 +19,13 @@ from services.modbus_service import get_latest_data
 from ai_analyzer import (
     generate_power_summary,
     generate_english_report,
-    _get_or_init_parallel_router,
     generate_chat_response,
     stream_chat_response,
     generate_power_summary_parallel,
-    clear_all_cache
+    clear_all_cache,
+    robust_ai_call
 )
 from predictive_maintenance_external import create_data_hash
-from llm_parallel import get_parallel_router
 
 router = APIRouter(prefix="/api/v1")
 logger = logging.getLogger("PM2230_API")
@@ -273,23 +272,14 @@ async def get_ai_fault_summary(request: Request):
             {"role": "system", "content": "You are an expert electrical engineer specializing in power quality analysis and fault diagnosis. Always respond in Thai language. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."},
             {"role": "user", "content": prompt}
         ]
-        
-        router_instance = _get_or_init_parallel_router()
-        parallel_result = await router_instance.generate_parallel(
-            messages=messages,
-            task_type="fault_analysis",
-            selection_strategy="quality"
-        )
-        
-        if parallel_result.get("success"):
-            content = parallel_result.get("content", "")
-            provider = parallel_result.get("provider", "unknown")
-            logger.info(f"Parallel LLM selected best provider: {provider} for fault summary")
+        try:
+            content = await robust_ai_call(messages)
             
             save_to_cache(cache_key, content)
             
-            return {"summary": content, "is_cached": False, "cache_key": cache_key, "provider": provider}
-        else:
+            return {"summary": content, "is_cached": False, "cache_key": cache_key, "provider": "robust_single"}
+        except Exception as e:
+            logger.error(f"Error in robust_ai_call for fault summary: {e}")
             return {"summary": "❌ ไม่สามารถเชื่อมต่อ AI ได้", "is_cached": False, "cache_key": cache_key}
         
     except Exception as e:

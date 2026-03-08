@@ -226,7 +226,9 @@ async def _live_test(port: int = 8003):
                 full_text = "".join(chunks)
 
     except Exception as e:
-        print(f"❌ Connection error: {e}")
+        import traceback
+        print(f"❌ Connection error: {type(e).__name__} - {e}")
+        traceback.print_exc()
         return
 
     print(f"\n{'='*60}")

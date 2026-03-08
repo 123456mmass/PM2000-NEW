@@ -1,5 +1,8 @@
 # 📋 AI LLM API Code Review & Testing Report - FINAL
 
+> [!WARNING]
+> **อัปเดต (9 มี.ค. 2026):** เอกสารนี้เป็นรายงานการทดสอบระบบเดิม ปัจจุบันโครงสร้าง AI ทั้งหมดถูกย้ายไปใช้ **Single Fallback Mode ผ่าน AI Proxy Server** ที่ปลอดภัยและเร็วกว่าแล้ว (ดู `SINGLE_FALLBACK_MODE_GUIDE.md`)
+
 **โปรเจกต์:** PM2230 Dashboard - AI Power Analysis
 **วันที่รีวิว:** 2026-03-03
 **Reviewer:** AI Code Review Team
