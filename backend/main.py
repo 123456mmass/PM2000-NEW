@@ -175,7 +175,9 @@ app.include_router(line_webhook.router)
 # Build & Mount Frontend Static Files
 # ============================================================================
 if getattr(sys, 'frozen', False):
-    FRONTEND_DIR = os.path.join(sys._MEIPASS, 'frontend_build')
+    # When bundled, frontend_web is copied next to the executable
+    executable_dir = os.path.dirname(sys.executable)
+    FRONTEND_DIR = os.path.join(executable_dir, 'frontend_web')
 else:
     FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'out')
 
@@ -199,4 +201,10 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=state.DEFAULT_API_PORT, reload=True)
+    frozen = getattr(sys, 'frozen', False)
+    if frozen:
+        # Running as a compiled executable, DO NOT USE reload=True
+        uvicorn.run(app, host="0.0.0.0", port=state.DEFAULT_API_PORT)
+    else:
+        # Running from source, use reload for development
+        uvicorn.run("main:app", host="0.0.0.0", port=state.DEFAULT_API_PORT, reload=True)
