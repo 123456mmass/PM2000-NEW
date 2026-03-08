@@ -440,37 +440,25 @@ async def get_external_predictive_maintenance(request: Request):
             {"role": "user", "content": prompt}
         ]
         
-        router_instance = _get_or_init_parallel_router()
-        parallel_result = await router_instance.generate_parallel(
-            messages=messages,
-            task_type="predictive_analysis",
-            selection_strategy="quality"
-        )
+        content = await robust_ai_call(messages)
         
-        if parallel_result.get("success"):
-            content = parallel_result.get("content", "")
-            provider = parallel_result.get("provider", "unknown")
-            logger.info(f"Parallel LLM selected best provider: {provider} for predictive maintenance")
-            
-            result = {
-                "status": "success",
-                "maintenance_needed": "ต้องการการบำรุงรักษา" in content or "อันตราย" in content or "เตือน" in content,
-                "confidence": 0.9 if ("ต้องการการบำรุงรักษา" in content or "อันตราย" in content) else 0.7 if "เตือน" in content else 0.3,
-                "message": content,
-                "provider": provider,
-                "details": {
-                    "model": provider,
-                    "tokens_used": 0
-                },
-                "is_cached": False,
-                "cache_key": cache_key
-            }
-            
-            save_to_cache(cache_key, json.dumps(result))
-            
-            return result
-        else:
-            raise HTTPException(status_code=500, detail="All LLM providers failed")
+        result = {
+            "status": "success",
+            "maintenance_needed": "ต้องการการบำรุงรักษา" in content or "อันตราย" in content or "เตือน" in content,
+            "confidence": 0.9 if ("ต้องการการบำรุงรักษา" in content or "อันตราย" in content) else 0.7 if "เตือน" in content else 0.3,
+            "message": content,
+            "provider": "single-fallback-proxy",
+            "details": {
+                "model": "single-fallback-proxy",
+                "tokens_used": 0
+            },
+            "is_cached": False,
+            "cache_key": cache_key
+        }
+        
+        save_to_cache(cache_key, json.dumps(result))
+        
+        return result
             
     except Exception as e:
         logger.error(f"Error in get_external_predictive_maintenance (parallel): {e}")
@@ -617,33 +605,22 @@ async def get_energy_efficiency_ai(request: Request):
             {"role": "user", "content": prompt}
         ]
         
-        router_instance = _get_or_init_parallel_router()
-        parallel_result = await router_instance.generate_parallel(
-            messages=messages,
-            task_type="energy_analysis",
-            selection_strategy="quality"
-        )
+        content = await robust_ai_call(messages)
         
-        if parallel_result.get("success"):
-            content = parallel_result.get("content", "")
-            provider = parallel_result.get("provider", "unknown")
-            logger.info(f"Parallel LLM selected best provider: {provider} for energy analysis")
-            
-            result = {
-                "status": "success",
-                "analysis": content,
-                "provider": provider,
-                "is_cached": False,
-                "cache_key": cache_key
-            }
-            
-            save_to_cache(cache_key, json.dumps(result))
-            return result
-        else:
-            raise HTTPException(status_code=500, detail="All LLM providers failed")
+        result = {
+            "status": "success",
+            "analysis": content,
+            "provider": "single-fallback-proxy",
+            "is_cached": False,
+            "cache_key": cache_key
+        }
+        
+        save_to_cache(cache_key, json.dumps(result))
+        
+        return result
             
     except Exception as e:
-        logger.error(f"Error in get_energy_efficiency_ai (parallel): {e}")
+        logger.error(f"Error in get_energy_efficiency_ai: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/energy-tips")

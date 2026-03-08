@@ -28,7 +28,7 @@ echo [1/3] Setting up Python Backend...
 cd backend
 if not exist .venv (
     echo Creating virtual environment...
-    py -3.12 -m venv .venv
+    py -3.12.4 -m venv .venv
     if errorlevel 1 (
         echo [ERROR] Failed to create virtual environment. Is Python 3.12 installed?
         echo Download from: https://www.python.org/downloads/release/python-3121/
@@ -38,9 +38,20 @@ if not exist .venv (
 )
 call .venv\Scripts\activate.bat
 echo Installing Python dependencies...
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install pyinstaller
+where uv >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] UV detected! Using ultra-fast UV installer...
+    uv pip install --python .venv\Scripts\python.exe --upgrade pip
+    uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+    uv pip install --python .venv\Scripts\python.exe pyinstaller
+) else (
+    echo [INFO] UV not found. Using standard pip installer ^(this may take a few minutes^)...
+    echo [TIP] If the window seems frozen, DO NOT click inside it. Press ENTER repeatedly to unfreeze.
+    set PYTHONKEYRINGBACKEND=keyring.backends.null.Keyring
+    python -m pip install --upgrade pip --no-cache-dir --progress-bar off
+    python -m pip install -r requirements.txt --no-cache-dir --progress-bar off
+    python -m pip install pyinstaller --no-cache-dir --progress-bar off
+) 
 
 echo Bundling Python backend into executable (Sidecar)...
 python -m PyInstaller --noconfirm backend-server.spec
