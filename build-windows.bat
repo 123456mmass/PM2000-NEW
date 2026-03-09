@@ -53,6 +53,31 @@ if %ERRORLEVEL% equ 0 (
     python -m pip install pyinstaller --no-cache-dir --progress-bar off
 ) 
 
+:: 1.5. Build Rust Core Module (pm2000_core)
+echo.
+echo [1.5/3] Building Rust Core Module (pm2000_core)...
+where cargo >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Cargo detected! Building pm2000_core...
+    cd pm2000_core
+    cargo clean >nul 2>&1
+    set RUSTFLAGS=-C target-feature=+crt-static
+    set PYO3_PYTHON=%CD%\..\.venv\Scripts\python.exe
+    cargo build --release
+    if errorlevel 1 (
+        echo [WARN] Rust build failed! Backend will use Python fallback.
+        echo [WARN] Make sure VS Build Tools 2022 with C++ workload is installed.
+    ) else (
+        echo [INFO] Copying pm2000_core.pyd...
+        copy /Y target\release\pm2000_core.dll ..\pm2000_core.pyd >nul
+        echo [OK] Rust module built successfully!
+    )
+    cd ..
+) else (
+    echo [WARN] Cargo not found. Skipping Rust build. Backend will use Python fallback.
+    echo [TIP] Install Rust from https://rustup.rs/ for better performance.
+)
+
 echo Bundling Python backend into executable (Sidecar)...
 python -m PyInstaller --noconfirm backend-server.spec
 cd ..

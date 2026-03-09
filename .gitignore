@@ -1,15 +1,18 @@
+# === Python ===
 .venv/
 backend/.venv/
-.next/
-frontend/.next/
-node_modules/
-frontend/node_modules/
 __pycache__/
 backend/__pycache__/
 *.pyc
-.DS_Store
+*.pyo
 
-# Build outputs (generated - do not commit)
+# === Node / Next.js ===
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+
+# === Build Outputs ===
 frontend/out/
 frontend/dist/
 backend/dist/
@@ -18,21 +21,45 @@ build/
 dist/
 *.exe
 
-# Environment files - Frontend and Backend
+# === Rust Build Artifacts ===
+backend/pm2000_core/target/
+backend/pm2000_core/cargo_errors.*
+backend/pm2000_core/cargo_output.*
+backend/pm2000_core/cargo_json.*
+
+# === Compiled Binaries (generated - do not commit) ===
+*.pyd
+*.dll
+*.so
+*.dylib
+
+# === Environment Files ===
 frontend/.env
 frontend/.env.local
 frontend/.env.development
 frontend/.env.production
 backend/.env
 backend/.env.local
-
-# Keep example files for reference
 !frontend/.env.example
 !backend/.env.example
 
+# === Data / Logs / Backups ===
 *.csv
-*.json
 *.zip
 *.pkl
-backup.ps1
+*.log
+
+# === Config (generated per-machine) ===
+energy_config.json
+
+# === OS / IDE ===
+.DS_Store
+Thumbs.db
 __codex_root_test.tmp
+
+# === Misc ===
+backup.ps1
+install_uv.ps1
+*.md
+!README.md
+!README-WINDOWS.md

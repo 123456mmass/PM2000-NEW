@@ -269,7 +269,7 @@ async def get_ai_fault_summary(request: Request):
 วิเคราะห์สาเหตุและรูปแบบของการเกิด Fault จากข้อมูลด้านบน"""
 
         messages = [
-            {"role": "system", "content": "You are an expert electrical engineer specializing in power quality analysis and fault diagnosis. Always respond in Thai language. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."},
+            {"role": "system", "content": "You are an expert electrical engineer specializing in power quality analysis and fault diagnosis. Always respond in Thai language. CRITICAL INSTRUCTION: When advising on power quality, YOU MUST explicitly reference the following Thai Standards: - Voltage Sag/Swell: PEA/MEA standard allows ±10% variation from 230V. - THDv: EIT standard limits THDv to 5%. - Power Factor (PF): PEA/MEA requires PF >= 0.85 to avoid kVARh penalty. - Voltage Unbalance: EIT standard critical limit is 2-5%. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."},
             {"role": "user", "content": prompt}
         ]
         try:
@@ -401,7 +401,7 @@ async def get_external_predictive_maintenance(request: Request):
 
 ## หัวข้อรายงาน:
 รายงานฉบับนี้วิเคราะห์จากข้อมูลค่าเฉลี่ยของ Power Meter รุ่น PM2230
-วันที่-เวลา: {data.get('timestamp', 'N/A')}
+วันที่-เวลา: {datetime.now().strftime('%d/%m/%Y เวลา %H:%M:%S น.')}
 
 ---
 
@@ -425,17 +425,17 @@ async def get_external_predictive_maintenance(request: Request):
 - กำลังไฟฟ้ารวม: {data.get('P_Total', 0)} kW
 - พลังงานสะสม: {data.get('kWh_Total', 0)} kWh
 
-## เกณฑ์ประเมินและผลกระทบ (อ้างอิง IEEE):
-- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-3%, อันตราย > 3% (ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น, ประสิทธิภาพมอเตอร์ลดลง, อุปกรณ์อิเล็กทรอนิกส์เสียหาย)
-- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (ผลกระทบ: เครื่องใช้ไฟฟ้า/PLC/Drive ผิดปกติ, หม้อแปลง/สายไฟร้อนเกินไป, สูญเสียพลังงานสูงขึ้น)
-- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85
+## เกณฑ์ประเมินและผลกระทบ (อ้างอิง วสท. และ กฟภ./กฟน.):
+- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-5%, อันตราย > 5% (อ้างอิง วสท. ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น)
+- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (อ้างอิงระบบจำหน่าย กฟภ. วสท. ผลกระทบ: เครื่องใช้ไฟฟ้าผิดปกติ, หม้อแปลงร้อน)
+- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85 (อ้างอิง กฟภ./กฟน. เสี่ยงโดนปรับ kVARh)
 
 ทำนายความต้องการในการบำรุงรักษาและให้คำแนะนำการแก้ไขเชิงเทคนิคที่ปฏิบัติได้จริง"""
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful electrical engineering assistant specializing in predictive maintenance analysis. Always respond in Thai language with technical accuracy. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
+                "content": "You are a helpful electrical engineering assistant specializing in predictive maintenance analysis. Always respond in Thai language with technical accuracy.\nCRITICAL INSTRUCTION: When advising on power quality, YOU MUST explicitly reference the following Thai Standards:\n- Voltage Sag/Swell: PEA/MEA standard allows ±10% variation from 230V.\n- THDv: EIT standard limits THDv to 5%.\n- Power Factor (PF): PEA/MEA requires PF >= 0.85 to avoid kVARh penalty.\n- Voltage Unbalance: EIT standard critical limit is 2-5%.\nFORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
             },
             {"role": "user", "content": prompt}
         ]
@@ -566,7 +566,7 @@ async def get_energy_efficiency_ai(request: Request):
 
 ## หัวข้อรายงาน:
 รายงานฉบับนี้วิเคราะห์ประสิทธิภาพพลังงานจากข้อมูลค่าเฉลี่ยของ Power Meter รุ่น PM2230
-วันที่-เวลา: {data.get('timestamp', 'N/A')}
+วันที่-เวลา: {datetime.now().strftime('%d/%m/%Y เวลา %H:%M:%S น.')}
 
 ---
 
@@ -589,18 +589,18 @@ async def get_energy_efficiency_ai(request: Request):
 - กำลังไฟฟ้ารวม: {data.get('P_Total', 0)} kW
 - พลังงานสะสม: {data.get('kWh_Total', 0)} kWh
 
-## เกณฑ์ประเมินและผลกระทบ (อ้างอิง IEEE):
-- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-3%, อันตราย > 3% (ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น, ประสิทธิภาพมอเตอร์ลดลง, อุปกรณ์อิเล็กทรอนิกส์เสียหาย)
-- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (ผลกระทบ: เครื่องใช้ไฟฟ้า/PLC/Drive ผิดปกติ, หม้อแปลง/สายไฟร้อนเกินไป, สูญเสียพลังงานสูงขึ้น)
-- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85 (ผลกระทบ: กระแสสูงขึ้น, สูญเสียพลังงาน, ค่าไฟฟ้าสูงขึ้น)
-- **Current Unbalance**: ปกติ < 2%, เตือน 2-3%, อันตราย > 3% (ผลกระทบ: สายนิวทรัลมีความร้อนสูงเสี่ยงต่อการไหม้, อุปกรณ์ป้องกัน/Breaker ทำงานผิดปกติ)
+## เกณฑ์ประเมินและผลกระทบ (อ้างอิง วสท. และ กฟภ./กฟน.):
+- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-5%, อันตราย > 5% (อ้างอิง วสท. ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น)
+- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (อ้างอิงระบบจำหน่าย กฟภ. วสท. ผลกระทบ: เครื่องใช้ไฟฟ้าผิดปกติ, หม้อแปลงร้อน)
+- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85 (อ้างอิง กฟภ./กฟน. เสี่ยงโดนปรับ kVARh)
+- **Current Unbalance**: ปกติ < 2%, เตือน 2-5%, อันตราย > 5% (อ้างอิง วสท. ผลกระทบ: สายนิวทรัลมีความร้อนสูง, Breaker ทริป)
 
 วิเคราะห์ประสิทธิภาพพลังงานและให้คำแนะนำการประหยัดพลังงานเชิงเทคนิคที่ปฏิบัติได้จริง"""
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful electrical engineering assistant specializing in energy efficiency analysis. Always respond in Thai language with technical accuracy. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
+                "content": "You are a helpful electrical engineering assistant specializing in energy efficiency analysis. Always respond in Thai language with technical accuracy.\nCRITICAL INSTRUCTION: When advising on power quality, YOU MUST explicitly reference the following Thai Standards:\n- Voltage Sag/Swell: PEA/MEA standard allows ±10% variation from 230V.\n- THDv: EIT standard limits THDv to 5%.\n- Power Factor (PF): PEA/MEA requires PF >= 0.85 to avoid kVARh penalty.\n- Voltage Unbalance: EIT standard critical limit is 2-5%.\nFORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
             },
             {"role": "user", "content": prompt}
         ]

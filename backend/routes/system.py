@@ -126,6 +126,8 @@ async def get_status(request: Request):
         "slave_id": state.real_client.slave_id if connected else state.DEFAULT_SLAVE_ID,
         "parity": state.real_client.parity if connected else state.DEFAULT_PARITY,
         "last_poll_error": state.last_poll_error,
+        "rust_available": state.RUST_AVAILABLE,
+        "use_rust": state.USE_RUST,
     }
 
 

@@ -7,6 +7,20 @@ from predictive_maintenance import PredictiveMaintenance
 from predictive_maintenance_external import ExternalPredictiveMaintenance
 from energy_management import EnergyManagement
 
+# === Rust Core Availability ===
+try:
+    import pm2000_core  # noqa: F401
+    RUST_AVAILABLE: bool = True
+except ImportError:
+    RUST_AVAILABLE = False
+
+# If PM2230_NO_RUST=1 is set (e.g. from start-web.bat), disable Rust even if available
+USE_RUST: bool = RUST_AVAILABLE and os.getenv("PM2230_NO_RUST", "0") != "1"
+
+def has_rust_core() -> bool:
+    """Central check: is Rust core both available AND enabled?"""
+    return RUST_AVAILABLE and USE_RUST
+
 # === Global State Variables ===
 real_client: Optional[PM2230Client] = None
 cached_data: Dict = {}

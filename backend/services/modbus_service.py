@@ -4,6 +4,9 @@ import logging
 import time
 import os
 import csv
+import json
+import collections
+
 import platform
 import glob
 import math
@@ -20,6 +23,14 @@ from fault_engine import diagnose_faults
 from ai_analyzer import generate_line_fault_analysis
 
 logger = logging.getLogger("PM2230_API")
+
+# ============================================================================
+# Global State for Anomaly Detection History
+# ============================================================================
+ANOMALY_HISTORY = collections.deque(maxlen=5)
+
+if state.has_rust_core():
+    import pm2000_core
 
 # ============================================================================
 # Core Polling Helpers
@@ -197,6 +208,11 @@ async def send_line_message(message: str) -> None:
         logger.error(f"Exception while sending Line notification: {e}")
 
 def check_limits(data: Dict) -> Dict:
+    if state.has_rust_core():
+        try:
+            return pm2000_core.diagnose_faults(data)
+        except Exception as e:
+            logger.error(f"Rust diagnose_faults error: {e}")
     return diagnose_faults(data)
 
 def init_csv_file():
@@ -222,12 +238,15 @@ def generate_simulated_data():
     sim_energy_kvarh += 0.01
 
     t = time.time()
-    v1 = 230 + math.sin(t * 0.1) * 1.5 + random.uniform(-0.2, 0.2)
-    v2 = 229 + math.sin(t * 0.1 + 2) * 1.5 + random.uniform(-0.2, 0.2)
-    v3 = 231 + math.sin(t * 0.1 + 4) * 1.5 + random.uniform(-0.2, 0.2)
-    i1 = 10 + math.sin(t * 0.2) * 0.8 + random.uniform(-0.1, 0.1)
-    i2 = 9.5 + math.sin(t * 0.2 + 2) * 0.8 + random.uniform(-0.1, 0.1)
-    i3 = 10.2 + math.sin(t * 0.2 + 4) * 0.8 + random.uniform(-0.1, 0.1)
+    v_fluct = math.sin(t * 0.1) * 1.5
+    v1 = 230.0 + v_fluct + random.uniform(-0.2, 0.2)
+    v2 = 230.1 + v_fluct + random.uniform(-0.2, 0.2)
+    v3 = 229.9 + v_fluct + random.uniform(-0.2, 0.2)
+    
+    i_fluct = math.sin(t * 0.2) * 0.5
+    i1 = 10.0 + i_fluct + random.uniform(-0.05, 0.05)
+    i2 = 10.1 + i_fluct + random.uniform(-0.05, 0.05)
+    i3 = 9.9 + i_fluct + random.uniform(-0.05, 0.05)
 
     if state.simulator_state.get("voltage_sag"):
         v_mult = 0.82
@@ -261,9 +280,9 @@ def generate_simulated_data():
     v_unb = calculate_unbalance(v1, v2, v3)
     i_unb = 1.2 + random.uniform(-0.2, 0.2)
 
-    p1 = (v1 * i1 * 0.9) / 1000.0
-    p2 = (v2 * i2 * 0.9) / 1000.0
-    p3 = (v3 * i3 * 0.9) / 1000.0
+    p1 = (v1 * i1 * 0.95) / 1000.0
+    p2 = (v2 * i2 * 0.95) / 1000.0
+    p3 = (v3 * i3 * 0.95) / 1000.0
 
     s1 = (v1 * i1) / 1000.0
     s2 = (v2 * i2) / 1000.0
@@ -285,7 +304,7 @@ def generate_simulated_data():
         "THDv_L1": round(thdv1, 2), "THDv_L2": round(thdv2, 2), "THDv_L3": round(thdv3, 2),
         "THDi_L1": round(thdi1, 2), "THDi_L2": round(thdi2, 2), "THDi_L3": round(thdi3, 2),
         "V_unb": round(v_unb, 2), "U_unb": round(v_unb*0.8, 2), "I_unb": round(i_unb, 2),
-        "PF_L1": 0.9, "PF_L2": 0.9, "PF_L3": 0.9, "PF_Total": 0.9,
+        "PF_L1": 0.95, "PF_L2": 0.95, "PF_L3": 0.95, "PF_Total": 0.95,
         "kWh_Total": round(sim_energy_kwh, 2), "kVAh_Total": round(sim_energy_kvah, 2), "kvarh_Total": round(sim_energy_kvarh, 2)
     }
 
@@ -409,6 +428,11 @@ def _read_fast_block(client) -> dict:
     result: dict = {"status": "OK", "timestamp": datetime.now().isoformat()}
 
     def _decode_f32(regs):
+        if state.has_rust_core():
+            try:
+                return round(pm2000_core.decode_float32(regs[0], regs[1]), 4)
+            except Exception:
+                pass
         hi, lo = regs[0], regs[1]
         raw = struct.pack(">HH", hi, lo)
         val = struct.unpack(">f", raw)[0]
@@ -530,12 +554,49 @@ async def poll_modbus_data():
                     "status": "NOT_CONNECTED",
                 }
 
+            # Get flat_data for logging and anomaly detection
+            flat_data = get_latest_data()
+
             # ── Alert evaluation (every fast cycle) ──────────────────────────
             has_alert = False
-            _alerts = {}
+            _alerts = {"alerts": []} # Initialize _alerts here
+            
             if state.cached_data and state.cached_data.get("status") not in ["NOT_CONNECTED", "ERROR"]:
-                _alerts = check_limits(state.cached_data)
-                has_alert = _alerts.get("status") == "ALERT"
+                # Check limits (Fallback + Fast Rust Rules)
+                # We skip the old check_limits() here and use the new Phase 4 Anomaly Detection
+                
+                # 1. Provide Config and History safely
+                config = {}
+                try:
+                    with open("energy_config.json", "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                        config = cfg.get("anomaly_thresholds", {})
+                except Exception as e:
+                    logger.warning(f"Could not load anomaly_thresholds from energy_config.json: {e}")
+                
+                # 2. Add current flat_data to history
+                ANOMALY_HISTORY.append({k: float(v) for k, v in flat_data.items() if isinstance(v, (int, float))})
+                
+                # 3. Detect Anomalies
+                if state.has_rust_core():
+                    try:
+                        # PM2000 Core takes data dict, history list (as dicts), config dict
+                        rust_alerts = pm2000_core.detect_anomalies(
+                            flat_data, 
+                            list(ANOMALY_HISTORY), 
+                            config
+                        )
+                        if len(rust_alerts) > 0:
+                            has_alert = True
+                            _alerts["alerts"] = rust_alerts
+                    except Exception as e:
+                        logger.error(f"Rust detect_anomalies error: {e}")
+                        # Fallback to python check_limits if Rust fails
+                        _alerts = check_limits(flat_data)
+                        has_alert = _alerts.get("status") == "ALERT"
+                else:
+                    _alerts = check_limits(flat_data)
+                    has_alert = _alerts.get("status") == "ALERT"
 
             async with state.alerts_lock:
                 update_current_alerts(_alerts if has_alert else None)

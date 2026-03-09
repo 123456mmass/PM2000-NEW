@@ -43,39 +43,44 @@ def diagnose_faults(data: Dict) -> Dict:
             "detail": "Possible fuse blown or primary side failure."
         })
     
-    # 3. Voltage Unbalance (ANSI)
+    # 3. Voltage Unbalance
     if v_avg > 100:
         v_unb = calculate_unbalance(v1, v2, v3)
-        if v_unb > 5.0:  # Standards usually suggest < 3-5%
+        if v_unb > 5.0:
             alerts.append({
                 "category": "unbalance",
                 "severity": "high",
-                "message": f"Critical Voltage Unbalance: {v_unb:.1f}%",
-                "detail": "High risk of motor overheating/failure."
+                "message": f"แรงดันไฟฟ้าไม่สมดุล {v_unb:.1f}% เกินมาตรฐาน วสท. (2-5%) มอเตอร์ 3 เฟสจะเกิดความร้อนสะสมและกินกระแสเกิน",
+                "detail": "ตรวจสอบการกระจายโหลด 1 เฟส ให้สมดุลในทุกเฟส หรือเช็กจุดต่อสายไฟ/ขั้วหลวม (Loose Connection)"
             })
     
     # 4. Overvoltage / Overload / Sag (Logic Correlation)
-    if v_avg > 250: # Standard is typically 230V + 10% = 253V
+    if v_avg > 250:
         alerts.append({
             "category": "voltage_swell",
             "severity": "high",
-            "message": f"Voltage Swell: {v_avg:.1f}V",
-            "detail": "High supply voltage may damage sensitive equipment."
+            "message": "แรงดันไฟฟ้าเกินมาตรฐาน กฟภ./กฟน. (สูงกว่า 253V) เสี่ยงต่อการทะลุของฉนวน (Insulation Breakdown) ในอุปกรณ์อิเล็กทรอนิกส์",
+            "detail": "ตรวจสอบระบบปรับแรงดันไฟฟ้า (AVR) ตัดวงจรอุปกรณ์ที่ไวต่อแรงดัน หรือปรับแทปหม้อแปลงลง"
         })
     elif 0 < v_avg < 190:
-        if i_avg > 45: # Assuming 50A is a critical threshold
+        thd_v1 = float(data.get("THDv_L1", 0) or 0)
+        thd_v2 = float(data.get("THDv_L2", 0) or 0)
+        thd_v3 = float(data.get("THDv_L3", 0) or 0)
+        max_thd = max(thd_v1, thd_v2, thd_v3)
+        
+        if max_thd > 8.0:
             alerts.append({
-                "category": "overload",
+                "category": "power_quality",
                 "severity": "high",
-                "message": f"System Overload Detected: {i_avg:.1f}A",
-                "detail": "Voltage dropping due to excessive current draw."
+                "message": f"ค่าเพี้ยนฮาร์มอนิกแรงดัน (THDv) สูงถึง {max_thd:.1f}% เกินมาตรฐาน วสท. ที่กำหนดไว้ไม่เกิน 5% เสี่ยงต่อหม้อแปลงร้อนจัด",
+                "detail": "ตรวจสอบการทำงานของ VSD/Inverter หรืออุปกรณ์ Non-linear และพิจารณาติดตั้ง Harmonic Filter (Active/Passive)"
             })
         else:
             alerts.append({
                 "category": "voltage_sag",
                 "severity": "high",
-                "message": f"Voltage Sag: {v_avg:.1f}V",
-                "detail": "Supply side voltage drop detected."
+                "message": "เกิดปัญหาไฟตก (Voltage Sag) ต่ำกว่ามาตรฐาน กฟภ./กฟน. (207V) อาจส่งผลให้มอเตอร์ไหม้หรืออุปกรณ์อิเล็กทรอนิกส์รีเซ็ต",
+                "detail": "ตรวจสอบแทปหม้อแปลง (Transformer Tap) หรือติดต่อการไฟฟ้าเพื่อตรวจสอบแรงดันตกคร่อมในสายชอร์ต"
             })
     
     # 5. Harmonics (THD)
@@ -84,7 +89,7 @@ def diagnose_faults(data: Dict) -> Dict:
     thd_v3 = float(data.get("THDv_L3", 0) or 0)
     max_thd = max(thd_v1, thd_v2, thd_v3)
     
-    if max_thd > 8.0: # Standard is typically < 5%
+    if max_thd > 8.0:
         alerts.append({
             "category": "harmonics",
             "severity": "medium",
@@ -102,7 +107,7 @@ def diagnose_faults(data: Dict) -> Dict:
         })
     
     # 7. Short Circuit Detection
-    if i_avg > 100: # Assuming 100A is a critical threshold for short circuit
+    if i_avg > 100:
         alerts.append({
             "category": "short_circuit",
             "severity": "critical",
@@ -112,7 +117,7 @@ def diagnose_faults(data: Dict) -> Dict:
     
     # 8. Ground Fault Detection
     i_n = float(data.get("I_N", 0) or 0)
-    if i_n > 5: # Assuming 5A is a critical threshold for ground fault
+    if i_n > 5:
         alerts.append({
             "category": "ground_fault",
             "severity": "critical",

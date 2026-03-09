@@ -12,6 +12,17 @@ import logging
 from datetime import datetime
 import json
 
+import os
+
+if os.getenv("PM2230_NO_RUST", "0") != "1":
+    try:
+        import pm2000_core
+        HAS_RUST_CORE = True
+    except ImportError:
+        HAS_RUST_CORE = False
+else:
+    HAS_RUST_CORE = False
+
 # ตั้งค่า Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -205,6 +216,13 @@ class PM2230Scanner:
         """Decode two 16-bit registers as Big Endian IEEE 754 float."""
         import struct
         hi, lo = registers[0], registers[1]
+        if HAS_RUST_CORE:
+            try:
+                val = pm2000_core.decode_float32(hi, lo)
+                return round(val, 4)
+            except Exception:
+                pass
+        
         raw_bytes = struct.pack('>HH', hi, lo)
         val = struct.unpack('>f', raw_bytes)[0]
         # Handle NaN / Inf
@@ -216,6 +234,14 @@ class PM2230Scanner:
     def _decode_int64(self, registers: List[int]) -> int:
         """Decode four 16-bit registers as Big Endian Signed 64-bit Integer."""
         import struct
+        if HAS_RUST_CORE:
+            try:
+                # pm2000_core.decode_int64 returns (val, bytes), we only need val
+                val, _ = pm2000_core.decode_int64(registers)
+                return val
+            except Exception:
+                pass
+
         raw_bytes = struct.pack('>HHHH', *registers)
         return struct.unpack('>q', raw_bytes)[0]
 
@@ -285,29 +311,70 @@ class PM2230Scanner:
         # 1. อ่าน Block หลัก (Volt, Current, Power, Energy, Unbalance, PF บางส่วน)
         # Register 2999 - 3250
         retries = 3
-        for attempt in range(retries):
+        rust_success = False
+        rust_blocks = {}
+        
+        if HAS_RUST_CORE:
+            # Before attempting Rust, ensure pymodbus lets go of the COM port
+            # In a real system, multiple concurrent accesses can corrupt the buffer
+            if hasattr(self.client, 'is_socket_open') and self.client.is_socket_open():
+                self.client.close()
+                
             try:
-                r1 = self.client.read_holding_registers(address=2999, count=125, slave=self.slave_id)
-                r2 = self.client.read_holding_registers(address=3190, count=60, slave=self.slave_id)
-                r3 = self.client.read_holding_registers(address=21299, count=40, slave=self.slave_id)
-                break
+                rust_res = pm2000_core.modbus_read_blocks(self.port, self.baudrate, self.slave_id)
+                if rust_res.get("status") == "OK":
+                    rust_blocks['r1'] = rust_res.get("block_2999", [])
+                    rust_blocks['r2'] = rust_res.get("block_3190", [])
+                    rust_blocks['r3'] = rust_res.get("block_21299", [])
+                    rust_success = True
+                else:
+                    logger.warning(f"Rust modbus read returned ERROR: {rust_res.get('error')}")
             except Exception as e:
-                logger.error(f"Bulk read Exception: {e}")
-                if attempt < retries - 1:
-                    logger.info(f"Retrying bulk read {attempt + 1}/{retries}...")
-                    continue
-                data['status'] = 'ERROR'
-                return data
+                logger.warning(f"Rust modbus exception fallback to pymodbus: {e}")
+                
+            # If Rust failed, re-open python client for fallback
+            if not rust_success:
+                self.client.connect()
+
+        r1, r2, r3 = None, None, None # Initialize for scope
+        if not rust_success:
+            for attempt in range(retries):
+                try:
+                    r1 = self.client.read_holding_registers(address=2999, count=125, slave=self.slave_id)
+                    r2 = self.client.read_holding_registers(address=3190, count=60, slave=self.slave_id)
+                    r3 = self.client.read_holding_registers(address=21299, count=40, slave=self.slave_id)
+                    break
+                except Exception as e:
+                    logger.error(f"Bulk read Exception: {e}")
+                    if attempt < retries - 1:
+                        logger.info(f"Retrying bulk read {attempt + 1}/{retries}...")
+                        continue
+                    data['status'] = 'ERROR'
+                    return data
 
         # Helper function to extract registers from the bulk blocks
         def get_registers(address: int, quantity: int) -> Optional[List[int]]:
-            if not r1.isError() and 2999 <= address < 2999 + 125:
+            if rust_success:
+                if 2999 <= address < 2999 + 125:
+                    offset = address - 2999
+                    return rust_blocks['r1'][offset:offset+quantity]
+                if 3190 <= address < 3190 + 60:
+                    offset = address - 3190
+                    return rust_blocks['r2'][offset:offset+quantity]
+                if 21299 <= address < 21299 + 40:
+                    offset = address - 21299
+                    return rust_blocks['r3'][offset:offset+quantity]
+                # Fallback to single read if not in block
+                self.client.connect() # ensure Python client is up if doing individual reads
+                return self.read_register(address, quantity)
+                
+            if r1 and not r1.isError() and 2999 <= address < 2999 + 125:
                 offset = address - 2999
                 return r1.registers[offset:offset+quantity]
-            if not r2.isError() and 3190 <= address < 3190 + 60:
+            if r2 and not r2.isError() and 3190 <= address < 3190 + 60:
                 offset = address - 3190
                 return r2.registers[offset:offset+quantity]
-            if not r3.isError() and 21299 <= address < 21299 + 40:
+            if r3 and not r3.isError() and 21299 <= address < 21299 + 40:
                 offset = address - 21299
                 return r3.registers[offset:offset+quantity]
                 

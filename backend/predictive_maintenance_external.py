@@ -16,6 +16,15 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 import hashlib
 import time
 
+if os.getenv("PM2230_NO_RUST", "0") != "1":
+    try:
+        import pm2000_core
+        HAS_RUST_CORE = True
+    except ImportError:
+        HAS_RUST_CORE = False
+else:
+    HAS_RUST_CORE = False
+
 # ตั้งค่า Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -27,76 +36,111 @@ logger = logging.getLogger(__name__)
 CACHE_TTL_SECONDS = int(os.getenv("PM_CACHE_TTL_SECONDS", "300"))  # Default 5 minutes
 MAX_CACHE_SIZE = int(os.getenv("PM_CACHE_MAX_SIZE", "100"))  # Maximum cache entries
 
-# In-memory cache: {cache_key: (result, timestamp)}
-_cache: Dict[str, tuple] = {}
+# In-memory cache is now handled by pm2000_core if available
+# Fallback local cache ONLY if Rust core is missing
+_local_cache: Dict[str, tuple] = {}
+
+def _round_for_cache(value):
+    """ปัดค่า numeric ให้หยาบขึ้นเพื่อให้ cache hit ได้ง่ายขึ้น"""
+    if isinstance(value, float):
+        if abs(value) >= 100:
+            return round(value, 0)
+        elif abs(value) >= 1:
+            return round(value, 1)
+        else:
+            return round(value, 2)
+    return value
+
 
 def create_data_hash(data: dict) -> str:
     """
     สร้าง hash จาก input data โดยไม่รวม timestamp
-    ใช้เป็น cache key สำหรับ AI response
+    ปัดค่า numeric ให้หยาบขึ้นเพื่อให้ cache hit ได้ง่ายขึ้น
     """
-    # Remove timestamp from hash calculation
-    data_copy = {k: v for k, v in data.items() if k != 'timestamp'}
-    # Sort keys for consistent hash
+    data_copy = {
+        k: _round_for_cache(v)
+        for k, v in data.items()
+        if k != 'timestamp'
+    }
     return hashlib.md5(json.dumps(data_copy, sort_keys=True, default=str).encode()).hexdigest()
+
 
 def get_from_cache(data_hash: str) -> Optional[str]:
     """
     ดึงข้อมูลจาก cache ถ้ายังไม่หมดอายุ (TTL)
     """
-    if data_hash in _cache:
-        cached_result, cached_time = _cache[data_hash]
+    if HAS_RUST_CORE:
+        try:
+            return pm2000_core.cache_get(data_hash)
+        except Exception as e:
+            logger.error(f"Rust cache_get error: {e}")
+
+    # Fallback to local cache
+    if data_hash in _local_cache:
+        cached_result, cached_time = _local_cache[data_hash]
         if time.time() - cached_time < CACHE_TTL_SECONDS:
-            logger.info(f"Cache HIT: {data_hash[:8]}...")
+            logger.info(f"Local Cache HIT: {data_hash[:8]}...")
             return cached_result
         else:
-            # Cache expired, remove it
-            logger.info(f"Cache EXPIRED: {data_hash[:8]}...")
-            del _cache[data_hash]
+            del _local_cache[data_hash]
     return None
 
 def save_to_cache(data_hash: str, result: str) -> None:
     """
-    บันทึกผลลัพธ์ลง cache พร้อม timestamp
-    ถ้า cache เต็ม จะลบ entry เก่าที่สุดออก
+    บันทึกผลลัพธ์ลง cache พร้อมพารามิเตอร์ TTL
     """
-    # Check cache size limit and remove oldest if needed
-    if len(_cache) >= MAX_CACHE_SIZE:
-        # Remove oldest entry (based on timestamp)
-        oldest_key = min(_cache.keys(), key=lambda k: _cache[k][1])
-        del _cache[oldest_key]
-        logger.info(f"Cache FULL: Removed oldest entry ({oldest_key[:8]}...) to make room")
+    if HAS_RUST_CORE:
+        try:
+            pm2000_core.cache_set(data_hash, result, CACHE_TTL_SECONDS)
+            logger.info(f"Rust Cache SAVE: {data_hash[:8]}... (TTL: {CACHE_TTL_SECONDS}s)")
+            return
+        except Exception as e:
+            logger.error(f"Rust cache_set error: {e}")
 
-    _cache[data_hash] = (result, time.time())
-    logger.info(f"Cache SAVE: {data_hash[:8]}... (TTL: {CACHE_TTL_SECONDS}s, Size: {len(_cache)}/{MAX_CACHE_SIZE})")
+    # Fallback to local cache
+    if len(_local_cache) >= MAX_CACHE_SIZE:
+        oldest_key = min(_local_cache.keys(), key=lambda k: _local_cache[k][1])
+        del _local_cache[oldest_key]
+    
+    _local_cache[data_hash] = (result, time.time())
+    logger.info(f"Local Cache SAVE: {data_hash[:8]}...")
 
 def get_cache_stats() -> Dict[str, int]:
     """
     Returns cache statistics (for debugging/monitoring)
     """
+    rust_size = 0
+    if HAS_RUST_CORE:
+        try:
+            rust_size = pm2000_core.cache_size()
+        except:
+            pass
+
     current_time = time.time()
     valid_entries = sum(
-        1 for _, cached_time in _cache.values()
+        1 for _, cached_time in _local_cache.values()
         if current_time - cached_time < CACHE_TTL_SECONDS
     )
+    total = rust_size + len(_local_cache)
     return {
-        "total_entries": len(_cache),
-        "valid_entries": valid_entries,
-        "expired_entries": len(_cache) - valid_entries
+        "total_entries": total,
+        "valid_entries": rust_size + valid_entries,
+        "expired_entries": len(_local_cache) - valid_entries
     }
 
 def cleanup_expired_cache() -> int:
     """
-    ลบ expired entries ออกจาก cache
+    ลบ expired entries ออกจาก local fallback cache
+    Rust cache handles TTL automatically.
     Returns number of entries removed
     """
     current_time = time.time()
     expired_keys = [
-        key for key, (_, cached_time) in _cache.items()
+        key for key, (_, cached_time) in _local_cache.items()
         if current_time - cached_time >= CACHE_TTL_SECONDS
     ]
     for key in expired_keys:
-        del _cache[key]
+        del _local_cache[key]
     if expired_keys:
         logger.info(f"Cache cleanup: removed {len(expired_keys)} expired entries")
     return len(expired_keys)
@@ -105,8 +149,16 @@ def clear_all_cache() -> int:
     """
     ล้างข้อมูล cache ทั้งหมด (สำหรับ forced refresh)
     """
-    count = len(_cache)
-    _cache.clear()
+    count = 0
+    if HAS_RUST_CORE:
+        try:
+            count = pm2000_core.cache_size()
+            pm2000_core.cache_clear()
+        except:
+            pass
+    
+    count += len(_local_cache)
+    _local_cache.clear()
     logger.info(f"Cache CLEAR ALL: removed {count} entries")
     return count
 
@@ -263,8 +315,10 @@ class ExternalPredictiveMaintenance:
             except Exception as e:
                 logger.error(f"Error parsing cached result: {e}")
                 # Remove corrupted cache entry
-                if cache_key in _cache:
-                    del _cache[cache_key]
+                if HAS_RUST_CORE:
+                    pm2000_core.cache_delete(cache_key)
+                if cache_key in _local_cache:
+                    del _local_cache[cache_key]
         
         logger.info(f"Cache MISS: {cache_key}... - calling AI API")
         
@@ -292,7 +346,7 @@ class ExternalPredictiveMaintenance:
 
 ## หัวข้อรายงาน:
 รายงานฉบับนี้วิเคราะห์จากข้อมูลค่าเฉลี่ยของ Power Meter รุ่น PM2230
-วันที่-เวลา: {data.get('timestamp', 'N/A')}
+วันที่-เวลา: {datetime.now().strftime('%d/%m/%Y เวลา %H:%M:%S น.')}
 
 --- (ใช้เส้นคั่น)
 
@@ -316,10 +370,10 @@ class ExternalPredictiveMaintenance:
 - กำลังไฟฟ้ารวม: {data.get('P_Total', 0)} kW
 - พลังงานสะสม: {data.get('kWh_Total', 0)} kWh
 
-## เกณฑ์ประเมินและผลกระทบ (อ้างอิง IEEE):
-- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-3%, อันตราย > 3% (ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น, ประสิทธิภาพมอเตอร์ลดลง, อุปกรณ์อิเล็กทรอนิกส์เสียหาย)
-- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (ผลกระทบ: เครื่องใช้ไฟฟ้า/PLC/Drive ผิดปกติ, หม้อแปลง/สายไฟร้อนเกินไป, สูญเสียพลังงานสูงขึ้น)
-- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85
+## เกณฑ์ประเมินและผลกระทบ (อ้างอิง วสท. และ กฟภ./กฟน.):
+- **Voltage Unbalance**: ปกติ < 2%, เตือน 2-5%, อันตราย > 5% (อ้างอิง วสท. ผลกระทบ: มอเตอร์ร้อนเกินไป, ฉนวนเสื่อมสภาพเร็วขึ้น)
+- **Harmonic Distortion (THDv/THDi)**: ปกติ THDv < 5%, เตือน 5-8%, อันตราย > 8% (อ้างอิงระบบจำหน่าย กฟภ. วสท. ผลกระทบ: เครื่องใช้ไฟฟ้าผิดปกติ, หม้อแปลงร้อน)
+- **Power Factor**: ดี > 0.9, ปานกลาง 0.85-0.9, ต่ำ < 0.85 (อ้างอิง กฟภ./กฟน. เสี่ยงโดนปรับ kVARh)
 
 ทำนายความต้องการในการบำรุงรักษาและให้คำแนะนำการแก้ไขเชิงเทคนิคที่ปฏิบัติได้จริง
 """
@@ -327,7 +381,7 @@ class ExternalPredictiveMaintenance:
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful electrical engineering assistant specializing in predictive maintenance analysis. Always respond in Thai language with technical accuracy. FORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
+                "content": "You are a helpful electrical engineering assistant specializing in predictive maintenance analysis. Always respond in Thai language with technical accuracy.\nCRITICAL INSTRUCTION: When advising on power quality, YOU MUST explicitly reference the following Thai Standards:\n- Voltage Sag/Swell: PEA/MEA standard allows ±10% variation from 230V.\n- THDv: EIT standard limits THDv to 5%.\n- Power Factor (PF): PEA/MEA requires PF >= 0.85 to avoid kVARh penalty.\n- Voltage Unbalance: EIT standard critical limit is 2-5%.\nFORMATTING: Use Markdown syntax. DO NOT use HTML tags like <br>."
             },
             {
                 "role": "user",

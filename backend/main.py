@@ -63,6 +63,14 @@ async def lifespan(app: FastAPI):
     state.em_model = EnergyManagement()
     logger.info("⚡ Energy Management model initialized")
 
+    # Log engine mode
+    if state.RUST_AVAILABLE and state.USE_RUST:
+        logger.info("🦀 Engine: Python + Rust (pm2000_core loaded)")
+    elif state.RUST_AVAILABLE and not state.USE_RUST:
+        logger.info("🐍 Engine: Python Only (Rust available but disabled via PM2230_NO_RUST)")
+    else:
+        logger.info("🐍 Engine: Python Only (pm2000_core not found)")
+
     # ── Start Cloudflare Tunnel in background ──────────────────────────────
     def _start_tunnel():
         try:
